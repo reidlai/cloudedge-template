@@ -19,3 +19,17 @@ variable "region" {
   description = "The primary GCP region for regional resources."
   type        = string
 }
+
+variable "max_concurrent_deployments" {
+  description = "The maximum number of concurrent infrastructure deployments."
+  type        = number
+  default     = 1
+}
+
+variable "resource_tags" {
+  description = "A map of tags to apply to all resources."
+  type        = map(string)
+  default = {
+    "managed-by" = "opentofu"
+  }
+}
