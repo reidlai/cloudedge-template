@@ -4,16 +4,16 @@ variable "project_id" {
 }
 
 variable "environment" {
-  description = "The deployment environment (e.g., 'nonprod', 'prod')."
+  description = "The deployment environment."
   type        = string
 }
 
 variable "network_name" {
-  description = "The name of the network to which to apply the firewall rule."
+  description = "The name of the network to apply the firewall rule to."
   type        = string
 }
 
 variable "resource_tags" {
-  description = "A map of tags to apply to all resources."
+  description = "A map of tags to apply to resources."
   type        = map(string)
 }

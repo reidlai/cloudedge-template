@@ -4,16 +4,16 @@ variable "project_id" {
 }
 
 variable "environment" {
-  description = "The deployment environment (e.g., 'nonprod', 'prod')."
+  description = "The deployment environment."
   type        = string
 }
 
 variable "network1_name" {
-  description = "The name of the first network to peer."
+  description = "The name of the first network for peering."
   type        = string
 }
 
 variable "network2_name" {
-  description = "The name of the second network to peer."
+  description = "The name of the second network for peering."
   type        = string
 }
