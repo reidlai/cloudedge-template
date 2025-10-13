@@ -1,0 +1,5 @@
+# Terraform/OpenTofu specific ignore patterns
+.terraform/
+*.tfstate*
+*.tfvars
+.terraform.lock.hcl

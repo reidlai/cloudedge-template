@@ -1,0 +1,17 @@
+# Ignored files for Git repository
+
+# Universal OS/Editor Artifacts
+.DS_Store
+Thumbs.db
+
+# Terraform/OpenTofu Artifacts (Mandated by Plan)
+.terraform/
+*.tfstate*
+*.tfvars
+.terraform.lock.hcl
+
+# Go Artifacts (For Terratest)
+*.exe
+*.test
+*.out
+vendor/
