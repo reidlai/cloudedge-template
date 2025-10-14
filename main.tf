@@ -50,10 +50,10 @@ module "dr_loadbalancer" {
 }
 
 module "inter_vpc_peering" {
-  source        = "./modules/gcp/inter_vpc_peering"
-  project_id    = var.project_id
-  environment   = var.environment
-  network1_name = module.ingress_vpc.ingress_vpc_name
-  network2_name = module.egress_vpc.egress_vpc_name
+  source             = "./modules/gcp/inter_vpc_peering"
+  project_id         = var.project_id
+  environment        = var.environment
+  network1_self_link = module.ingress_vpc.ingress_vpc_self_link
+  network2_self_link = module.egress_vpc.egress_vpc_self_link
   # Peering resources don't support labels
 }

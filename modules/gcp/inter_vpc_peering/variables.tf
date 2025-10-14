@@ -8,12 +8,12 @@ variable "environment" {
   type        = string
 }
 
-variable "network1_name" {
-  description = "The name of the first network for peering."
+variable "network1_self_link" {
+  description = "The self_link of the first network for peering."
   type        = string
 }
 
-variable "network2_name" {
-  description = "The name of the second network for peering."
+variable "network2_self_link" {
+  description = "The self_link of the second network for peering."
   type        = string
 }
