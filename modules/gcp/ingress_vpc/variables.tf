@@ -8,6 +8,11 @@ variable "environment" {
   type        = string
 }
 
+variable "region" {
+  description = "The GCP region."
+  type        = string
+}
+
 variable "resource_tags" {
   description = "A map of tags to apply to resources."
   type        = map(string)

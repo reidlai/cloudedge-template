@@ -3,6 +3,7 @@ package gcp
 import (
 	"testing"
 
+	"github.com/gruntwork-io/terratest/modules/gcp"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
 )
@@ -10,10 +11,11 @@ import (
 func TestFullBaseline(t *testing.T) {
 	t.Parallel()
 
+	projectID := gcp.GetGoogleProjectIDFromEnvVar(t)
 	terraformOptions := &terraform.Options{
-		TerraformDir: "../../",
+		TerraformDir: "../../../",
 		Vars: map[string]interface{}{
-			"project_id": "your-gcp-project-id", // Replace with your GCP project ID
+			"project_id": projectID,
 			"region":     "us-central1",
 		},
 	}
@@ -22,12 +24,19 @@ func TestFullBaseline(t *testing.T) {
 
 	terraform.InitAndApply(t, terraformOptions)
 
-	outputs := terraform.OutputAll(t, terraformOptions)
-	assert.NotEmpty(t, outputs["ingress_vpc_name"], "Ingress VPC name should not be empty")
-	assert.NotEmpty(t, outputs["egress_vpc_name"], "Egress VPC name should not be empty")
-	assert.NotEmpty(t, outputs["firewall_rule_name"], "Firewall rule name should not be empty")
-	assert.NotEmpty(t, outputs["waf_policy_name"], "WAF policy name should not be empty")
-	assert.NotEmpty(t, outputs["lb_frontend_ip"], "Load balancer IP should not be empty")
-	assert.NotEmpty(t, outputs["peering1_name"], "Peering 1 name should not be empty")
-	assert.NotEmpty(t, outputs["peering2_name"], "Peering 2 name should not be empty")
+	ingressVpcName := terraform.Output(t, terraformOptions, "ingress_vpc_name")
+	egressVpcName := terraform.Output(t, terraformOptions, "egress_vpc_name")
+	firewallRuleName := terraform.Output(t, terraformOptions, "firewall_rule_name")
+	wafPolicyName := terraform.Output(t, terraformOptions, "waf_policy_name")
+	lbFrontendIp := terraform.Output(t, terraformOptions, "lb_frontend_ip")
+	peering1Name := terraform.Output(t, terraformOptions, "peering1_name")
+	peering2Name := terraform.Output(t, terraformOptions, "peering2_name")
+
+	assert.NotEmpty(t, ingressVpcName)
+	assert.NotEmpty(t, egressVpcName)
+	assert.NotEmpty(t, firewallRuleName)
+	assert.NotEmpty(t, wafPolicyName)
+	assert.NotEmpty(t, lbFrontendIp)
+	assert.NotEmpty(t, peering1Name)
+	assert.NotEmpty(t, peering2Name)
 }

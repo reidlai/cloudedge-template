@@ -10,13 +10,14 @@ import (
 func TestVpc(t *testing.T) {
 	t.Parallel()
 
+	projectID := gcp.GetGoogleProjectIDFromEnvVar(t)
+	region := "us-central1" // You can externalize this as well, e.g., using an environment variable.
 	terraformOptions := &terraform.Options{
-		TerraformDir: "../../",
+		TerraformDir: "../../../",
 		Vars: map[string]interface{}{
-			"project_id": "your-gcp-project-id", // Replace with your GCP project ID
-			"region":     "us-central1",
+			"project_id": projectID,
+			"region":     region,
 		},
-		Targets: []string{"module.ingress_vpc", "module.egress_vpc"},
 	}
 
 	defer terraform.Destroy(t, terraformOptions)
@@ -26,6 +27,6 @@ func TestVpc(t *testing.T) {
 	ingressVpcName := terraform.Output(t, terraformOptions, "ingress_vpc_name")
 	egressVpcName := terraform.Output(t, terraformOptions, "egress_vpc_name")
 
-	assert.NotEmpty(t, ingressVpcName, "Ingress VPC name should not be empty")
-	assert.NotEmpty(t, egressVpcName, "Egress VPC name should not be empty")
+	assert.NotEmpty(t, ingressVpcName)
+	assert.NotEmpty(t, egressVpcName)
 }

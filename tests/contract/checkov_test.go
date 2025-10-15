@@ -7,20 +7,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCheckov(t *testing.T) {
+func TestCheckovScan(t *testing.T) {
 	t.Parallel()
 
 	terraformOptions := &terraform.Options{
 		TerraformDir: "../../",
 	}
 
-	planFilePath := "./test.plan"
+	// Run `terraform init` and `terraform plan` and save the plan to a file
+	planFilePath := terraform.InitAndPlan(t, terraformOptions)
 
-	terraform.Init(t, terraformOptions)
-	terraform.RunTerraformCommand(t, terraformOptions, "plan", "-out="+planFilePath)
+	// Run checkov on the plan file
+	// This assumes checkov is installed and in the PATH
+	// You may need to customize the command to fit your environment
+	options := &terraform.Options{
+		TerraformDir: "../../",
+		PlanFilePath: planFilePath,
+	}
+	checkovResult := terraform.RunCheckov(t, options)
 
-	// This is a placeholder for running checkov. In a real CI/CD pipeline,
-	// you would have a separate step to run checkov against the plan file.
-	// For this test, we'll just assert that the plan file was created.
-	assert.FileExists(t, planFilePath, "Plan file should be created")
+	// For this example, we'll just assert that the command ran without error
+	// In a real-world scenario, you would parse the output and assert on specific checks
+	assert.NoError(t, checkovResult)
 }

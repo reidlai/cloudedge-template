@@ -9,11 +9,16 @@ variable "environment" {
 }
 
 variable "region" {
-  description = "The GCP region."
+  description = "The GCP region for the resources."
   type        = string
 }
 
 variable "resource_tags" {
   description = "A map of tags to apply to resources."
   type        = map(string)
+}
+
+variable "ingress_vpc_self_link" {
+  description = "The self_link of the main ingress VPC."
+  type        = string
 }

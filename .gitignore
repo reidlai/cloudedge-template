@@ -16,3 +16,5 @@ Thumbs.db
 *.out
 vendor/
 vibetics_nonprod.plan
+.env
+nonprod.plan

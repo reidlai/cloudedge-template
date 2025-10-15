@@ -33,3 +33,54 @@ variable "resource_tags" {
     "managed-by" = "opentofu"
   }
 }
+
+variable "managed_ssl_domain" {
+  description = "The domain name for the Google-managed SSL certificate."
+  type        = string
+  default     = "demo.example.com"
+}
+
+variable "enable_ingress_vpc" {
+  description = "If set to true, the ingress_vpc module will be enabled."
+  type        = bool
+  default     = false
+}
+
+variable "enable_egress_vpc" {
+  description = "If set to true, the egress_vpc module will be enabled."
+  type        = bool
+  default     = false
+}
+
+variable "enable_firewall" {
+  description = "If set to true, the firewall module will be enabled."
+  type        = bool
+  default     = false
+}
+
+variable "enable_waf" {
+  description = "If set to true, the waf module will be enabled."
+  type        = bool
+  default     = false
+}
+
+variable "enable_demo_backend" {
+  description = "If set to true, the demo_backend module will be enabled."
+  type        = bool
+  default     = false
+}
+
+variable "enable_dr_loadbalancer" {
+  description = "If set to true, the dr_loadbalancer module will be enabled."
+  type        = bool
+  default     = false
+}
+
+variable "enable_inter_vpc_peering" {
+  description = "If set to true, the inter_vpc_peering module will be enabled."
+  type        = bool
+  default     = false
+}
+
+
+

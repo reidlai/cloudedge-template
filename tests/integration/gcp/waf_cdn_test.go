@@ -3,6 +3,7 @@ package gcp
 import (
 	"testing"
 
+	"github.com/gruntwork-io/terratest/modules/gcp"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
 )
@@ -10,13 +11,13 @@ import (
 func TestWafCdn(t *testing.T) {
 	t.Parallel()
 
+	projectID := gcp.GetGoogleProjectIDFromEnvVar(t)
 	terraformOptions := &terraform.Options{
-		TerraformDir: "../../",
+		TerraformDir: "../../../",
 		Vars: map[string]interface{}{
-			"project_id": "your-gcp-project-id", // Replace with your GCP project ID
+			"project_id": projectID,
 			"region":     "us-central1",
 		},
-		Targets: []string{"module.waf"},
 	}
 
 	defer terraform.Destroy(t, terraformOptions)
@@ -24,6 +25,5 @@ func TestWafCdn(t *testing.T) {
 	terraform.InitAndApply(t, terraformOptions)
 
 	wafPolicyName := terraform.Output(t, terraformOptions, "waf_policy_name")
-
-	assert.NotEmpty(t, wafPolicyName, "WAF policy name should not be empty")
+	assert.NotEmpty(t, wafPolicyName)
 }

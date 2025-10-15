@@ -8,12 +8,12 @@ variable "environment" {
   type        = string
 }
 
-variable "network1_self_link" {
-  description = "The self_link of the first network."
-  type        = string
+variable "resource_tags" {
+  description = "A map of tags to apply to resources."
+  type        = map(string)
 }
 
-variable "network2_self_link" {
-  description = "The self_link of the second network."
+variable "region" {
+  description = "The GCP region for the backend service."
   type        = string
 }

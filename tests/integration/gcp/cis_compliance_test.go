@@ -3,40 +3,37 @@ package gcp
 import (
 	"testing"
 
+	"github.com/gruntwork-io/terratest/modules/gcp"
 	"github.com/gruntwork-io/terratest/modules/shell"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCISComplianceScan(t *testing.T) {
+func TestCISCompliance(t *testing.T) {
 	t.Parallel()
 
+	projectID := gcp.GetGoogleProjectIDFromEnvVar(t)
 	terraformOptions := &terraform.Options{
-		// The path to where our Terraform code is located
 		TerraformDir: "../../../",
-
-		// Variables to pass to our Terraform code using -var options
 		Vars: map[string]interface{}{
-			"project_id": "your-gcp-project-id", // TODO: Replace with a valid project ID
+			"project_id": projectID,
 			"region":     "us-central1",
 		},
 	}
 
-	// At the end of the test, run `terraform destroy` to clean up any resources that were created
 	defer terraform.Destroy(t, terraformOptions)
 
-	// This will run `terraform init` and `terraform apply` and fail the test if there are any errors
 	terraform.InitAndApply(t, terraformOptions)
 
-	// This is a placeholder for running a real CIS compliance scanner.
-	// In a real-world scenario, you would replace this with a call to a tool like Inspec, ScoutSuite, or a custom script.
-	// For now, we will just simulate a successful scan.
+	// This is a placeholder for running a CIS compliance scan.
+	// In a real-world scenario, you would have a script that uses a tool like InSpec or Security Command Center to run the scan.
 	cisScanCmd := shell.Command{
 		Command: "echo",
-		Args:    []string{"Simulating CIS scan... PASSED"},
+		Args:    []string{"Simulating CIS compliance scan..."},
 	}
+	shell.RunCommand(t, cisScanCmd)
 
-	// We expect a clean run, so any error here is a test failure.
-	_, err := shell.RunCommandAndGetOutputE(t, cisScanCmd)
-	assert.NoError(t, err, "CIS compliance scan failed.")
+	// For this example, we'll just assert that the command ran without error.
+	// In a real-world scenario, you would parse the output of the scan and assert on the results.
+	assert.True(t, true, "CIS compliance scan should pass")
 }

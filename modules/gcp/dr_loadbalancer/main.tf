@@ -3,34 +3,58 @@ resource "google_compute_global_address" "lb_ip" {
   name    = "${var.environment}-lb-ip"
 }
 
-resource "google_compute_backend_service" "default_backend" {
-  project   = var.project_id
-  name      = "${var.environment}-default-backend"
-  port_name = "http"
-  protocol  = "HTTP"
-  timeout_sec = 10
-
-  backend {
-    group = var.default_backend_group_id
-  }
-}
-
 resource "google_compute_url_map" "url_map" {
   project         = var.project_id
   name            = "${var.environment}-url-map"
-  default_service = google_compute_backend_service.default_backend.id
+  default_service = var.default_service_id
+
+  dynamic "host_rule" {
+    for_each = var.host_rules
+    content {
+      hosts        = host_rule.value.hosts
+      path_matcher = host_rule.value.path_matcher
+    }
+  }
+
+  dynamic "path_matcher" {
+    for_each = var.path_matchers
+    content {
+      name            = path_matcher.key
+      default_service = path_matcher.value.default_service
+      dynamic "path_rule" {
+        for_each = path_matcher.value.path_rules
+        content {
+          paths   = path_rule.value.paths
+          service = path_rule.value.service
+        }
+      }
+    }
+  }
 }
 
-resource "google_compute_target_http_proxy" "http_proxy" {
+resource "google_compute_managed_ssl_certificate" "managed_cert" {
   project = var.project_id
-  name    = "${var.environment}-http-proxy"
-  url_map = google_compute_url_map.url_map.id
+  name    = "${var.environment}-managed-cert"
+  managed {
+    domains = [var.managed_ssl_domain]
+  }
+}
+
+resource "google_compute_target_https_proxy" "https_proxy" {
+  project          = var.project_id
+  name             = "${var.environment}-https-proxy"
+  url_map          = google_compute_url_map.url_map.id
+  ssl_certificates = [google_compute_managed_ssl_certificate.managed_cert.id]
 }
 
 resource "google_compute_global_forwarding_rule" "forwarding_rule" {
   project      = var.project_id
   name         = "${var.environment}-forwarding-rule"
-  target       = google_compute_target_http_proxy.http_proxy.id
+  target       = google_compute_target_https_proxy.https_proxy.id
   ip_address   = google_compute_global_address.lb_ip.address
-  port_range   = "80"
+  port_range   = "443"
+}
+
+output "lb_frontend_ip" {
+  value = google_compute_global_address.lb_ip.address
 }

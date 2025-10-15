@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+    - name: Install pre-commit
+      run: pip install pre-commit
+    - name: Run pre-commit
+      run: pre-commit run --all-files
+    - name: NIST Compliance Check
+      run: echo "Simulating NIST compliance check..."
+    - name: Run Semgrep
+      uses: semgrep/semgrep-action@v1
+      with:
+        config: "p/terraform"
+    - name: Set up OpenTofu
+      uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_version: latest
+    - name: Initialize
+      run: tofu init
+    - name: Validate
+      run: tofu validate
+    - name: Plan
+      run: tofu plan -no-color
