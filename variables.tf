@@ -44,10 +44,20 @@ variable "max_concurrent_deployments" {
 }
 
 variable "resource_tags" {
-  description = "A map of tags to apply to all resources."
+  description = "A map of tags to apply to all resources. 'environment' and 'managed-by' are mandatory."
   type        = map(string)
+
+  validation {
+    condition = (
+      contains(keys(var.resource_tags), "environment") &&
+      contains(keys(var.resource_tags), "managed-by")
+    )
+    error_message = "resource_tags must contain 'environment' and 'managed-by' keys for compliance with FR-007."
+  }
+
   default = {
-    "managed-by" = "opentofu"
+    "managed-by"  = "opentofu"
+    "environment" = "nonprod"
   }
 }
 
@@ -133,6 +143,12 @@ variable "enable_self_signed_cert" {
 
 variable "enable_billing" {
   description = "If true, deploy the billing budget and alert module."
+  type        = bool
+  default     = false
+}
+
+variable "enable_cdn" {
+  description = "If set to true, the cdn module will be enabled."
   type        = bool
   default     = false
 }

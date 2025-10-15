@@ -1,0 +1,25 @@
+title = "Gitleaks Configuration for Vibetics CloudEdge"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "gcp-service-account-key"
+description = "GCP Service Account Private Key"
+regex = '''-----BEGIN PRIVATE KEY-----'''
+tags = ["gcp", "key"]
+
+[[rules]]
+id = "terraform-sensitive"
+description = "Terraform sensitive variable in plain text"
+regex = '''(?i)(password|secret|token|api_key)\s*=\s*["'][^"']+["']'''
+path = '''\.tf$'''
+tags = ["terraform", "sensitive"]
+
+[allowlist]
+description = "Global Allowlist"
+paths = [
+  '''\.git/''',
+  '''(.*?)(jpg|gif|doc|pdf|bin|svg|socket)$''',
+  '''threat_modelling/reports/.*'''
+]

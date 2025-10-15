@@ -35,10 +35,12 @@ resource "google_cloud_run_v2_service" "demo_api" {
     scaling {
       min_instance_count = 0 # Scale to zero for cost-effectiveness
     }
+    labels = var.resource_tags
   }
 
-  ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
   deletion_protection = false
+  labels              = var.resource_tags
 }
 
 # ---Default-deny egress firewall rule for the demo VPC---

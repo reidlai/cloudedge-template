@@ -27,6 +27,20 @@ provider "google" {
   region  = var.region
 }
 
+# --- Tagging Strategy ---
+
+locals {
+  # Merge user-provided tags with mandatory environment tag
+  standard_tags = merge(
+    var.resource_tags,
+    {
+      "environment" = var.environment
+      "project"     = var.project_id
+      "terraform"   = "true"
+    }
+  )
+}
+
 # --- API Enablement ---
 
 # Enables the necessary Google Cloud APIs for the project.
@@ -51,7 +65,7 @@ module "ingress_vpc" {
   project_id    = var.project_id
   environment   = var.environment
   region        = var.region
-  resource_tags = var.resource_tags
+  resource_tags = local.standard_tags
   cidr_range    = var.ingress_vpc_cidr_range
   depends_on = [
     google_project_service.project_apis["compute.googleapis.com"]
@@ -65,7 +79,7 @@ module "egress_vpc" {
   project_id    = var.project_id
   environment   = var.environment
   region        = var.region
-  resource_tags = var.resource_tags
+  resource_tags = local.standard_tags
   cidr_range    = var.egress_vpc_cidr_range
   depends_on = [
     google_project_service.project_apis["compute.googleapis.com"]
@@ -79,7 +93,7 @@ module "firewall" {
   project_id    = var.project_id
   environment   = var.environment
   network_name  = module.ingress_vpc[0].ingress_vpc_name
-  resource_tags = var.resource_tags
+  resource_tags = local.standard_tags
   depends_on = [
     google_project_service.project_apis["compute.googleapis.com"]
   ]
@@ -93,7 +107,41 @@ module "waf" {
   source        = "./modules/gcp/waf"
   project_id    = var.project_id
   environment   = var.environment
-  resource_tags = var.resource_tags
+  resource_tags = local.standard_tags
+  depends_on = [
+    google_project_service.project_apis["compute.googleapis.com"]
+  ]
+}
+
+# --- CDN Configuration ---
+
+# Creates a GCS bucket for static content delivery via CDN
+resource "google_storage_bucket" "cdn_content" {
+  count    = var.enable_cdn ? 1 : 0
+  project  = var.project_id
+  name     = "${var.project_id}-${var.environment}-cdn-content"
+  location = var.region
+
+  uniform_bucket_level_access = true
+
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+    condition {
+      age = 30
+    }
+  }
+}
+
+# Deploys the CDN backend bucket
+module "cdn" {
+  count         = var.enable_cdn ? 1 : 0
+  source        = "./modules/gcp/cdn"
+  project_id    = var.project_id
+  environment   = var.environment
+  bucket_name   = google_storage_bucket.cdn_content[0].name
+  resource_tags = local.standard_tags
   depends_on = [
     google_project_service.project_apis["compute.googleapis.com"]
   ]
@@ -133,7 +181,7 @@ module "demo_backend" {
   project_id                   = var.project_id
   environment                  = var.environment
   region                       = var.region
-  resource_tags                = var.resource_tags
+  resource_tags                = local.standard_tags
   ingress_vpc_self_link        = module.ingress_vpc[0].ingress_vpc_self_link
   vpc_connector_cidr_range     = var.vpc_connector_cidr_range
   vpc_connector_min_throughput = var.vpc_connector_min_throughput
@@ -152,7 +200,7 @@ module "dr_loadbalancer" {
   source             = "./modules/gcp/dr_loadbalancer"
   project_id         = var.project_id
   environment        = var.environment
-  resource_tags      = var.resource_tags
+  resource_tags      = local.standard_tags
   default_service_id = module.demo_backend[0].backend_service_id
   ssl_certificates   = local.ssl_certificate_links
   host_rules = [

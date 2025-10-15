@@ -1,6 +1,6 @@
 resource "google_compute_security_policy" "waf_policy" {
-  project = var.project_id
-  name    = "${var.environment}-waf-policy"
+  project     = var.project_id
+  name        = "${var.environment}-waf-policy"
   description = "WAF policy"
 
   rule {
@@ -14,6 +14,8 @@ resource "google_compute_security_policy" "waf_policy" {
     }
     description = "Default rule, deny all"
   }
+
+  labels = var.resource_tags
 }
 
 output "waf_policy_name" {
