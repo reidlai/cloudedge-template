@@ -7,7 +7,7 @@ resource "google_compute_network" "ingress_vpc" {
 resource "google_compute_subnetwork" "ingress_subnet" {
   project       = var.project_id
   name          = "${var.environment}-ingress-subnet"
-  ip_cidr_range = "10.0.1.0/24"
+  ip_cidr_range = var.cidr_range
   network       = google_compute_network.ingress_vpc.name
   region        = var.region
 }

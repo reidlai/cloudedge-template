@@ -3,3 +3,16 @@
 *.tfstate*
 *.tfvars
 .terraform.lock.hcl
+
+# Git files
+.git/
+.gitignore
+
+# General documentation
+*.md
+
+# Specification files
+specs/
+features/
+.specify/
+.gemini/

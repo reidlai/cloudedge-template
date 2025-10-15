@@ -15,6 +15,23 @@ variable "project_id" {
   type        = string
 }
 
+variable "billing_account" {
+  description = "The GCP Billing Account ID."
+  type        = string
+}
+
+variable "ingress_vpc_cidr_range" {
+  description = "The CIDR range for the ingress VPC subnetwork."
+  type        = string
+  default     = "10.0.1.0/24"
+}
+
+variable "egress_vpc_cidr_range" {
+  description = "The CIDR range for the egress VPC subnetwork."
+  type        = string
+  default     = "10.0.2.0/24"
+}
+
 variable "region" {
   description = "The primary GCP region for regional resources."
   type        = string
@@ -35,10 +52,36 @@ variable "resource_tags" {
 }
 
 variable "managed_ssl_domain" {
-  description = "The domain name for the Google-managed SSL certificate."
+  description = "The domain name to use for the Google-managed SSL certificate."
   type        = string
-  default     = "demo.example.com"
+  default     = ""
 }
+
+variable "vpc_connector_cidr_range" {
+  description = "The CIDR range for the VPC Access Connector."
+  type        = string
+  default     = "10.12.0.0/28"
+}
+
+variable "vpc_connector_min_throughput" {
+  description = "The minimum throughput for the VPC Access Connector."
+  type        = number
+  default     = 200
+}
+
+variable "vpc_connector_max_throughput" {
+  description = "The maximum throughput for the VPC Access Connector."
+  type        = number
+  default     = 300
+}
+
+variable "demo_api_image" {
+  description = "The container image to use for the demo API."
+  type        = string
+  default     = "us-docker.pkg.dev/cloudrun/container/hello"
+}
+
+
 
 variable "enable_ingress_vpc" {
   description = "If set to true, the ingress_vpc module will be enabled."
@@ -82,5 +125,16 @@ variable "enable_inter_vpc_peering" {
   default     = false
 }
 
+variable "enable_self_signed_cert" {
+  description = "If true, use the self-signed certificate module for the load balancer. Otherwise, create a Google-managed SSL certificate."
+  type        = bool
+  default     = false
+}
+
+variable "enable_billing" {
+  description = "If true, deploy the billing budget and alert module."
+  type        = bool
+  default     = false
+}
 
 

@@ -32,19 +32,11 @@ resource "google_compute_url_map" "url_map" {
   }
 }
 
-resource "google_compute_managed_ssl_certificate" "managed_cert" {
-  project = var.project_id
-  name    = "${var.environment}-managed-cert"
-  managed {
-    domains = [var.managed_ssl_domain]
-  }
-}
-
 resource "google_compute_target_https_proxy" "https_proxy" {
   project          = var.project_id
   name             = "${var.environment}-https-proxy"
   url_map          = google_compute_url_map.url_map.id
-  ssl_certificates = [google_compute_managed_ssl_certificate.managed_cert.id]
+  ssl_certificates = var.ssl_certificates
 }
 
 resource "google_compute_global_forwarding_rule" "forwarding_rule" {

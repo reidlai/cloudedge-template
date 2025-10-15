@@ -12,9 +12,9 @@ resource "google_vpc_access_connector" "connector" {
   name           = "${var.environment}-vpc-connector"
   region         = var.region
   network        = google_compute_network.demo_vpc.name
-  ip_cidr_range  = "10.12.0.0/28"
-  min_throughput = 200
-  max_throughput = 300
+  ip_cidr_range  = var.vpc_connector_cidr_range
+  min_throughput = var.vpc_connector_min_throughput
+  max_throughput = var.vpc_connector_max_throughput
   depends_on     = [google_compute_network.demo_vpc]
 }
 
@@ -26,7 +26,7 @@ resource "google_cloud_run_v2_service" "demo_api" {
 
   template {
     containers {
-      image = "us-docker.pkg.dev/cloudrun/container/hello"
+      image = var.demo_api_image
     }
     vpc_access {
       connector = google_vpc_access_connector.connector.id
@@ -84,6 +84,17 @@ resource "google_compute_backend_service" "demo_backend" {
   port_name = "http"
   backend {
     group = google_compute_region_network_endpoint_group.serverless_neg.id
+  }
+  cdn_policy {
+    # Enable Cloud CDN for this backend
+    cache_key_policy {
+      include_host = true
+      include_protocol = true
+      include_query_string = true
+    }
+  }
+  log_config {
+    enable = true
   }
 }
 

@@ -25,13 +25,23 @@ variable "host_rules" {
 }
 
 variable "path_matchers" {
+
   description = "A map of path matchers for the URL map."
+
   type        = any
+
   default     = {}
+
 }
 
-variable "managed_ssl_domain" {
-  description = "The domain name to use for the Google-managed SSL certificate."
-  type        = string
-  default     = ""
+
+
+variable "ssl_certificates" {
+
+  description = "A list of SSL certificate self_links to attach to the HTTPS proxy."
+
+  type        = list(string)
+
 }
+
+
