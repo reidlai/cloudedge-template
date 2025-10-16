@@ -99,8 +99,26 @@ resource "google_compute_backend_service" "demo_backend" {
     }
   }
   log_config {
-    enable = true
+    enable      = true
+    sample_rate = 1.0 # Log 100% of requests for full observability (NFR-001)
   }
+}
+
+# Configure Cloud Logging retention for backend service logs
+# NFR-001 requires 30-day minimum retention for distributed tracing
+resource "google_logging_project_sink" "backend_service_logs" {
+  project     = var.project_id
+  name        = "${var.environment}-demo-backend-logs-sink"
+  destination = "logging.googleapis.com/projects/${var.project_id}/locations/global/buckets/${google_logging_project_bucket_config.backend_logs_bucket.id}"
+  filter      = "resource.type=\"http_load_balancer\" AND resource.labels.backend_service_name=\"${google_compute_backend_service.demo_backend.name}\""
+}
+
+resource "google_logging_project_bucket_config" "backend_logs_bucket" {
+  project        = var.project_id
+  location       = "global"
+  retention_days = 30 # NFR-001: 30-day trace data retention
+  bucket_id      = "${var.environment}-demo-backend-logs"
+  description    = "30-day retention bucket for demo backend service logs (NFR-001 compliance)"
 }
 
 # Grant Cloud Run Invoker role to allow unauthenticated access from load balancer
