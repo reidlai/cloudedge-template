@@ -38,7 +38,10 @@ resource "google_cloud_run_v2_service" "demo_api" {
     labels = var.resource_tags
   }
 
-  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  # Allow traffic from Google Cloud Load Balancers and internal VPC
+  # INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER allows both internal VPC access
+  # and access from Google Cloud Load Balancers (required for this architecture)
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   deletion_protection = false
   labels              = var.resource_tags
 }
@@ -98,6 +101,16 @@ resource "google_compute_backend_service" "demo_backend" {
   log_config {
     enable = true
   }
+}
+
+# Grant Cloud Run Invoker role to allow unauthenticated access from load balancer
+# This is required for internal-only Cloud Run services accessed via load balancer
+resource "google_cloud_run_service_iam_member" "invoker" {
+  project  = var.project_id
+  service  = google_cloud_run_v2_service.demo_api.name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }
 
 # ---Outputs---

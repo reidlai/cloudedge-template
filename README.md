@@ -2,6 +2,152 @@
 
 This repository contains the Infrastructure as Code (IaC) for the Vibetics CloudEdge platform, managed by OpenTofu. The purpose of this project is to provide a secure, standardized, and cloud-agnostic baseline infrastructure that can be deployed rapidly and consistently across multiple cloud providers.
 
+## Infrastructure Architecture
+
+### Traffic Flow: External Request → Demo API Backend
+
+The following diagram illustrates how incoming traffic is routed from the internet through multiple security layers to reach the demo API backend:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           INTERNET (External Client)                         │
+│                     curl -k -H "Host: example.com" https://34.117.156.60     │
+└────────────────────────────────────┬────────────────────────────────────────┘
+                                     │
+                                     │ HTTPS (Port 443)
+                                     │
+                          ┌──────────▼──────────┐
+                          │  Global External IP │
+                          │   34.117.156.60     │
+                          └──────────┬──────────┘
+                                     │
+┌────────────────────────────────────┼────────────────────────────────────────┐
+│                         EDGE SECURITY LAYER                                  │
+│                                    │                                         │
+│                          ┌─────────▼─────────┐                               │
+│                          │   Cloud Armor     │                               │
+│                          │      (WAF)        │                               │
+│                          │  - Rate limiting  │                               │
+│                          │  - DDoS protection│                               │
+│                          │  - OWASP rules    │                               │
+│                          └─────────┬─────────┘                               │
+│                                    │                                         │
+│                          ┌─────────▼─────────┐                               │
+│                          │   Cloud CDN       │                               │
+│                          │  - Static caching │                               │
+│                          │  - Edge serving   │                               │
+│                          └─────────┬─────────┘                               │
+└────────────────────────────────────┼────────────────────────────────────────┘
+                                     │
+┌────────────────────────────────────┼────────────────────────────────────────┐
+│                         LOAD BALANCING LAYER                                 │
+│                            (Ingress VPC)                                     │
+│                                    │                                         │
+│                          ┌─────────▼──────────┐                              │
+│                          │  HTTPS Load Balancer│                             │
+│                          │  - SSL termination  │                             │
+│                          │  - URL map routing  │                             │
+│                          │  - Host: example.com│                             │
+│                          └─────────┬───────────┘                             │
+│                                    │                                         │
+│                          ┌─────────▼───────────┐                             │
+│                          │   Backend Service   │                             │
+│                          │ (nonprod-demo-api-  │                             │
+│                          │      backend)       │                             │
+│                          │  - Health checks    │                             │
+│                          │  - Load distribution│                             │
+│                          └─────────┬───────────┘                             │
+│                                    │                                         │
+│                          ┌─────────▼───────────┐                             │
+│                          │  Serverless NEG     │                             │
+│                          │ (Network Endpoint   │                             │
+│                          │      Group)         │                             │
+│                          └─────────┬───────────┘                             │
+└────────────────────────────────────┼────────────────────────────────────────┘
+                                     │
+                                     │ Internal traffic only
+                                     │
+┌────────────────────────────────────┼────────────────────────────────────────┐
+│                         DEMO BACKEND VPC                                     │
+│                                    │                                         │
+│                          ┌─────────▼───────────┐                             │
+│                          │  VPC Connector      │                             │
+│                          │  10.12.0.0/28       │                             │
+│                          └─────────┬───────────┘                             │
+│                                    │                                         │
+│                          ┌─────────▼───────────┐                             │
+│                          │   Cloud Run Service │                             │
+│                          │  nonprod-demo-api   │                             │
+│                          │                     │                             │
+│                          │  Ingress Policy:    │                             │
+│                          │  INTERNAL_LOAD_     │                             │
+│                          │  BALANCER           │                             │
+│                          │                     │                             │
+│                          │  IAM: roles/run.    │                             │
+│                          │       invoker →     │                             │
+│                          │       allUsers      │                             │
+│                          │                     │                             │
+│                          │  Container:         │                             │
+│                          │  us-docker.pkg.dev/ │                             │
+│                          │  cloudrun/container/│                             │
+│                          │  hello              │                             │
+│                          └─────────────────────┘                             │
+│                                                                               │
+│                          ┌─────────────────────┐                             │
+│                          │  Egress Firewall    │                             │
+│                          │  DENY all egress    │                             │
+│                          │  (default-deny)     │                             │
+│                          └─────────────────────┘                             │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│                         VPC PEERING & ROUTING                                │
+│                                                                              │
+│   ┌──────────────────┐                           ┌──────────────────┐       │
+│   │   Ingress VPC    │◄─────── Peering ─────────►│   Egress VPC     │       │
+│   │  10.0.1.0/24     │                           │  10.0.2.0/24     │       │
+│   └──────────────────┘                           └──────────────────┘       │
+│            │                                              │                  │
+│            └──────────────► Peering ◄────────────────────┘                  │
+│                                 │                                            │
+│                        ┌────────▼────────┐                                  │
+│                        │ Demo Backend VPC│                                  │
+│                        │  (auto-created) │                                  │
+│                        └─────────────────┘                                  │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Security Controls
+
+| Layer | Component | Security Feature | Purpose |
+|-------|-----------|------------------|---------|
+| **Edge** | Cloud Armor (WAF) | Rate limiting, DDoS protection, OWASP rules | Blocks malicious traffic before it reaches infrastructure |
+| **Edge** | Cloud CDN | Cache static content, reduce backend load | Improves performance and reduces attack surface |
+| **Load Balancer** | SSL Certificate | TLS 1.2+ encryption | Encrypts data in transit |
+| **Load Balancer** | URL Map | Domain-based routing via Host header | Routes traffic to correct backend based on hostname |
+| **Backend** | Serverless NEG | Serverless network endpoint | Connects load balancer to Cloud Run without public exposure |
+| **Backend** | Cloud Run Ingress | `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` | **Blocks direct public access**, allows only load balancer traffic |
+| **Backend** | IAM Policy | `roles/run.invoker` for `allUsers` | Allows unauthenticated access from load balancer (authenticated at edge) |
+| **Network** | VPC Connector | Private connectivity | Cloud Run can access VPC resources securely |
+| **Network** | Egress Firewall | Default-deny all egress | Prevents data exfiltration from compromised containers |
+| **Network** | VPC Peering | Ingress ↔ Egress ↔ Demo Backend | Enables secure internal routing between VPCs |
+
+### Access Validation
+
+**✅ Allowed Traffic Path:**
+```bash
+curl -k -H "Host: example.com" https://34.117.156.60
+# → Cloud Armor → Cloud CDN → HTTPS LB → Backend Service → Serverless NEG → Cloud Run
+# Result: HTTP 200 OK with demo API response
+```
+
+**❌ Blocked Traffic Path:**
+```bash
+curl https://nonprod-demo-api-vbuysgm44q-pd.a.run.app
+# → Direct to Cloud Run URL
+# Result: HTTP 403/404 (blocked by INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER policy)
+```
+
 ## Project Skeleton
 
 ```
@@ -36,17 +182,33 @@ This repository contains the Infrastructure as Code (IaC) for the Vibetics Cloud
 1.  **Install OpenTofu**: Follow the official instructions at [https://opentofu.org/docs/intro/install/](https://opentofu.org/docs/intro/install/).
 2.  **Install Go**: Required for running Terratest. Follow instructions at [https://golang.org/doc/install](https://golang.org/doc/install).
 3.  **Configure Cloud Credentials**: For GCP, ensure your credentials are configured as environment variables (e.g., `GOOGLE_APPLICATION_CREDENTIALS`).
-4.  **Enable Core APIs**: Before the first deployment to a new GCP project, you must manually enable the necessary APIs. This is a one-time setup step. First, ensure your `.env` file is created and sourced, then run the following command:
+4.  **Enable Required GCP APIs**: Before the first deployment to a new GCP project, you **MUST** manually enable the necessary APIs. This is a one-time setup step that cannot be automated in OpenTofu without circular dependencies.
+
+    **Why manual enablement?** API enablement requires project-level permissions that create chicken-egg problems if managed in IaC. Additionally, disabling APIs during `tofu destroy` could accidentally delete resources not managed by this project.
+
+    First, ensure your `.env` file is created and sourced, then run:
     ```bash
     source .env
     gcloud services enable \
       --project="$TF_VAR_project_id" \
-      serviceusage.googleapis.com \
       compute.googleapis.com \
       run.googleapis.com \
       vpcaccess.googleapis.com \
       cloudresourcemanager.googleapis.com
     ```
+
+    **Required APIs**:
+    - `compute.googleapis.com` - Compute Engine (VPCs, Load Balancers, Firewalls, SSL Certificates)
+    - `run.googleapis.com` - Cloud Run (Serverless container platform for demo backend)
+    - `vpcaccess.googleapis.com` - VPC Access Connector (Cloud Run to VPC connectivity)
+    - `cloudresourcemanager.googleapis.com` - Resource Manager (Project metadata and IAM)
+
+    **Verification**: Confirm all APIs are enabled before running `tofu init`:
+    ```bash
+    gcloud services list --enabled --project="$TF_VAR_project_id" | grep -E 'compute|run|vpcaccess|cloudresourcemanager'
+    ```
+
+    If any APIs are missing, you'll encounter errors during `tofu plan` or `tofu apply`.
 
 ### Deployment
 

@@ -5,11 +5,12 @@ resource "google_compute_network" "ingress_vpc" {
 }
 
 resource "google_compute_subnetwork" "ingress_subnet" {
-  project       = var.project_id
-  name          = "${var.environment}-ingress-subnet"
-  ip_cidr_range = var.cidr_range
-  network       = google_compute_network.ingress_vpc.name
-  region        = var.region
+  project                  = var.project_id
+  name                     = "${var.environment}-ingress-subnet"
+  ip_cidr_range            = var.cidr_range
+  network                  = google_compute_network.ingress_vpc.name
+  region                   = var.region
+  private_ip_google_access = true # CIS GCP Foundation Benchmark 3.9 - Enable Private Google Access
 }
 
 output "ingress_vpc_name" {

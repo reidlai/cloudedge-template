@@ -30,33 +30,20 @@ provider "google" {
 # --- Tagging Strategy ---
 
 locals {
-  # Merge user-provided tags with mandatory environment tag
+  # Merge user-provided tags with mandatory tags
   standard_tags = merge(
     var.resource_tags,
     {
       "environment" = var.environment
       "project"     = var.project_id
-      "terraform"   = "true"
+      "managed-by"  = "opentofu"
     }
   )
 }
 
-# --- API Enablement ---
-
-# Enables the necessary Google Cloud APIs for the project.
-resource "google_project_service" "project_apis" {
-  for_each = toset([
-    "compute.googleapis.com",
-    "run.googleapis.com",
-    "vpcaccess.googleapis.com",
-    "cloudresourcemanager.googleapis.com",
-  ])
-  project                    = var.project_id
-  service                    = each.key
-  disable_dependent_services = true
-}
-
 # --- Core Network Infrastructure ---
+# Note: Required GCP APIs must be enabled manually before deployment.
+# See README.md Prerequisites section for the complete list and enablement commands.
 
 # Creates the Ingress VPC for all incoming public traffic.
 module "ingress_vpc" {
@@ -67,9 +54,6 @@ module "ingress_vpc" {
   region        = var.region
   resource_tags = local.standard_tags
   cidr_range    = var.ingress_vpc_cidr_range
-  depends_on = [
-    google_project_service.project_apis["compute.googleapis.com"]
-  ]
 }
 
 # Creates the Egress VPC for all outbound traffic from internal services.
@@ -81,9 +65,6 @@ module "egress_vpc" {
   region        = var.region
   resource_tags = local.standard_tags
   cidr_range    = var.egress_vpc_cidr_range
-  depends_on = [
-    google_project_service.project_apis["compute.googleapis.com"]
-  ]
 }
 
 # Applies baseline firewall rules to the Ingress VPC.
@@ -94,9 +75,6 @@ module "firewall" {
   environment   = var.environment
   network_name  = module.ingress_vpc[0].ingress_vpc_name
   resource_tags = local.standard_tags
-  depends_on = [
-    google_project_service.project_apis["compute.googleapis.com"]
-  ]
 }
 
 # --- Edge Security & Load Balancing ---
@@ -108,9 +86,6 @@ module "waf" {
   project_id    = var.project_id
   environment   = var.environment
   resource_tags = local.standard_tags
-  depends_on = [
-    google_project_service.project_apis["compute.googleapis.com"]
-  ]
 }
 
 # --- CDN Configuration ---
@@ -142,9 +117,6 @@ module "cdn" {
   environment   = var.environment
   bucket_name   = google_storage_bucket.cdn_content[0].name
   resource_tags = local.standard_tags
-  depends_on = [
-    google_project_service.project_apis["compute.googleapis.com"]
-  ]
 }
 
 # --- SSL Certificate Configuration ---
@@ -187,9 +159,6 @@ module "demo_backend" {
   vpc_connector_min_throughput = var.vpc_connector_min_throughput
   vpc_connector_max_throughput = var.vpc_connector_max_throughput
   demo_api_image               = var.demo_api_image
-  depends_on = [
-    google_project_service.project_apis
-  ]
 }
 
 # --- Global Load Balancer & Routing ---
@@ -215,9 +184,6 @@ module "dr_loadbalancer" {
       path_rules      = []
     }
   }
-  depends_on = [
-    google_project_service.project_apis
-  ]
 }
 
 # --- Core VPC Peering ---
