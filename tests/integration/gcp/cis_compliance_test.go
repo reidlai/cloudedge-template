@@ -40,14 +40,32 @@ func TestCISCompliance(t *testing.T) {
 	t.Log("Verifying CIS 3.9: Private Google Access enabled on VPC subnets...")
 
 	// Get ingress VPC subnet details
-	ingressSubnet := gcp.GetSubnetwork(t, projectID, region, environment+"-ingress-subnet")
-	assert.NotNil(t, ingressSubnet, "Ingress subnet should exist")
-	assert.True(t, ingressSubnet.PrivateIpGoogleAccess, "CIS 3.9: Private Google Access must be enabled on ingress subnet")
+	ingressSubnetCmd := shell.Command{
+		Command: "gcloud",
+		Args: []string{
+			"compute", "networks", "subnets", "describe",
+			environment + "-ingress-subnet",
+			"--project=" + projectID,
+			"--region=" + region,
+			"--format=value(privateIpGoogleAccess)",
+		},
+	}
+	ingressPGA := shell.RunCommandAndGetOutput(t, ingressSubnetCmd)
+	assert.Contains(t, ingressPGA, "True", "CIS 3.9: Private Google Access must be enabled on ingress subnet")
 
 	// Get egress VPC subnet details
-	egressSubnet := gcp.GetSubnetwork(t, projectID, region, environment+"-egress-subnet")
-	assert.NotNil(t, egressSubnet, "Egress subnet should exist")
-	assert.True(t, egressSubnet.PrivateIpGoogleAccess, "CIS 3.9: Private Google Access must be enabled on egress subnet")
+	egressSubnetCmd := shell.Command{
+		Command: "gcloud",
+		Args: []string{
+			"compute", "networks", "subnets", "describe",
+			environment + "-egress-subnet",
+			"--project=" + projectID,
+			"--region=" + region,
+			"--format=value(privateIpGoogleAccess)",
+		},
+	}
+	egressPGA := shell.RunCommandAndGetOutput(t, egressSubnetCmd)
+	assert.Contains(t, egressPGA, "True", "CIS 3.9: Private Google Access must be enabled on egress subnet")
 
 	t.Log("✓ CIS 3.9 compliance verified: Private Google Access enabled")
 

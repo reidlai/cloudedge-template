@@ -54,15 +54,23 @@ func TestMandatoryResourceTagging(t *testing.T) {
 
 	// Test VPC Networks
 	t.Log("Checking VPC network tags...")
-	ingressVPC := gcp.GetNetwork(t, projectID, region, environment+"-ingress-vpc")
-	assert.NotNil(t, ingressVPC, "Ingress VPC should exist")
+	ingressVPCCmd := shell.Command{
+		Command: "gcloud",
+		Args: []string{
+			"compute", "networks", "describe",
+			environment + "-ingress-vpc",
+			"--project=" + projectID,
+			"--format=json(labels)",
+		},
+	}
+	ingressVPCOutput := shell.RunCommandAndGetOutput(t, ingressVPCCmd)
+	assert.NotEmpty(t, ingressVPCOutput, "Ingress VPC should exist")
 
 	for _, tag := range mandatoryTags {
-		_, exists := ingressVPC.Labels[tag]
-		assert.True(t, exists, "VPC must have mandatory tag: "+tag)
+		assert.Contains(t, ingressVPCOutput, "\""+tag+"\"", "VPC must have mandatory tag: "+tag)
 	}
-	assert.Equal(t, "opentofu", ingressVPC.Labels["managed-by"], "managed-by tag should be 'opentofu'")
-	assert.Equal(t, environment, ingressVPC.Labels["environment"], "environment tag should match deployment")
+	assert.Contains(t, ingressVPCOutput, "\"managed-by\": \"opentofu\"", "managed-by tag should be 'opentofu'")
+	assert.Contains(t, ingressVPCOutput, "\"environment\": \""+environment+"\"", "environment tag should match deployment")
 
 	t.Log("✓ VPC tagging verified")
 

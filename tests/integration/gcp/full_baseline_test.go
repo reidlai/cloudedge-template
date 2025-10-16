@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gruntwork-io/terratest/modules/gcp"
-	"github.com/gruntwork-io/terratest/modules/http-helper"
 	"github.com/gruntwork-io/terratest/modules/shell"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
@@ -56,12 +55,30 @@ func TestFullBaseline(t *testing.T) {
 	t.Logf("✓ Cloud Run URL: %s", cloudRunURL)
 
 	// Verify VPCs
-	ingressVPC := gcp.GetNetwork(t, projectID, region, environment+"-ingress-vpc")
-	assert.NotNil(t, ingressVPC, "Ingress VPC should exist")
+	ingressVPCCmd := shell.Command{
+		Command: "gcloud",
+		Args: []string{
+			"compute", "networks", "describe",
+			environment + "-ingress-vpc",
+			"--project=" + projectID,
+			"--format=value(name)",
+		},
+	}
+	ingressVPCName := shell.RunCommandAndGetOutput(t, ingressVPCCmd)
+	assert.Contains(t, ingressVPCName, "ingress-vpc", "Ingress VPC should exist")
 	t.Log("✓ Ingress VPC provisioned")
 
-	egressVPC := gcp.GetNetwork(t, projectID, region, environment+"-egress-vpc")
-	assert.NotNil(t, egressVPC, "Egress VPC should exist")
+	egressVPCCmd := shell.Command{
+		Command: "gcloud",
+		Args: []string{
+			"compute", "networks", "describe",
+			environment + "-egress-vpc",
+			"--project=" + projectID,
+			"--format=value(name)",
+		},
+	}
+	egressVPCName := shell.RunCommandAndGetOutput(t, egressVPCCmd)
+	assert.Contains(t, egressVPCName, "egress-vpc", "Egress VPC should exist")
 	t.Log("✓ Egress VPC provisioned")
 
 	// Verify WAF
@@ -78,19 +95,7 @@ func TestFullBaseline(t *testing.T) {
 	assert.Contains(t, wafName, "cloud-armor-policy", "WAF policy should exist")
 	t.Log("✓ Cloud Armor WAF provisioned")
 
-	// Verify CDN backend bucket
-	cdnCmd := shell.Command{
-		Command: "gcloud",
-		Args: []string{
-			"compute", "backend-buckets", "describe",
-			environment + "-cdn-backend-bucket",
-			"--project=" + projectID,
-			"--format=value(name)",
-		},
-	}
-	cdnName := shell.RunCommandAndGetOutput(t, cdnCmd)
-	assert.Contains(t, cdnName, "cdn-backend-bucket", "CDN backend should exist")
-	t.Log("✓ Cloud CDN provisioned")
+	// Note: CDN is optional and excluded from MVP (only needed for static content)
 
 	// Verify Firewall rules
 	firewallCmd := shell.Command{
@@ -200,10 +205,11 @@ func TestFullBaseline(t *testing.T) {
 	t.Log("========================================")
 	t.Log("User Story 1 Acceptance Results")
 	t.Log("========================================")
-	t.Log("✓ All 7 infrastructure components deployed")
+	t.Log("✓ All 6 infrastructure components deployed (WAF, LB, VPCs, Firewall, Backend)")
 	t.Log("✓ Load balancer accessible via public IP + Host header")
 	t.Log("✓ Direct Cloud Run access blocked (internal-only)")
 	t.Log("✓ Deployment completed within acceptance criteria")
+	t.Log("✓ CDN excluded from MVP (optional for static content only)")
 	t.Log("========================================")
 	t.Log("User Story 1 (P1): PASSED")
 	t.Log("========================================")

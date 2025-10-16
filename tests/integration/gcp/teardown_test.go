@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gruntwork-io/terratest/modules/gcp"
@@ -41,13 +42,31 @@ func TestTeardown(t *testing.T) {
 	t.Log("Verifying resources exist before teardown...")
 
 	// Check VPCs exist
-	ingressVPC := gcp.GetNetwork(t, projectID, region, environment+"-ingress-vpc")
-	if ingressVPC == nil {
+	ingressVPCCmd := shell.Command{
+		Command: "gcloud",
+		Args: []string{
+			"compute", "networks", "describe",
+			environment + "-ingress-vpc",
+			"--project=" + projectID,
+			"--format=value(name)",
+		},
+	}
+	ingressVPCOutput := shell.RunCommandAndGetOutput(t, ingressVPCCmd)
+	if !strings.Contains(ingressVPCOutput, "ingress-vpc") {
 		t.Fatal("Ingress VPC not found after deployment")
 	}
 
-	egressVPC := gcp.GetNetwork(t, projectID, region, environment+"-egress-vpc")
-	if egressVPC == nil {
+	egressVPCCmd := shell.Command{
+		Command: "gcloud",
+		Args: []string{
+			"compute", "networks", "describe",
+			environment + "-egress-vpc",
+			"--project=" + projectID,
+			"--format=value(name)",
+		},
+	}
+	egressVPCOutput := shell.RunCommandAndGetOutput(t, egressVPCCmd)
+	if !strings.Contains(egressVPCOutput, "egress-vpc") {
 		t.Fatal("Egress VPC not found after deployment")
 	}
 
@@ -77,15 +96,22 @@ func TestTeardown(t *testing.T) {
 	}
 
 	// Verify VPCs are deleted
-	defer func() {
-		if r := recover(); r != nil {
-			t.Log("✓ VPCs successfully deleted (API returned expected error)")
-		}
-	}()
+	ingressVPCCheckCmd := shell.Command{
+		Command: "gcloud",
+		Args: []string{
+			"compute", "networks", "describe",
+			environment + "-ingress-vpc",
+			"--project=" + projectID,
+			"--format=value(name)",
+		},
+	}
 
-	ingressVPCAfter := gcp.GetNetwork(t, projectID, region, environment+"-ingress-vpc")
-	if ingressVPCAfter != nil {
+	// Use RunCommand which will fail if VPC doesn't exist
+	err := shell.RunCommandE(t, ingressVPCCheckCmd)
+	if err == nil {
 		t.Error("Ingress VPC still exists after teardown")
+	} else {
+		t.Log("✓ VPCs successfully deleted (resource not found as expected)")
 	}
 
 	t.Log("✓ Teardown completed successfully - all resources destroyed")

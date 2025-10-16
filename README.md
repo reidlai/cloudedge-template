@@ -4,9 +4,28 @@ This repository contains the Infrastructure as Code (IaC) for the Vibetics Cloud
 
 ## Infrastructure Architecture
 
-### Traffic Flow: External Request → Demo API Backend
+### Overview
 
-The following diagram illustrates how incoming traffic is routed from the internet through multiple security layers to reach the demo API backend:
+The Vibetics CloudEdge platform provides a **6-layer secure baseline infrastructure** designed for cloud-agnostic deployments. This MVP (Feature 001) focuses on establishing the foundational security and networking layers with a demo Cloud Run backend for validation.
+
+**Current MVP Scope**:
+- ✅ Edge security layer (WAF with DDoS protection)
+- ✅ Global HTTPS load balancer with domain-based routing capability
+- ✅ Ingress and Egress VPCs with firewall rules
+- ✅ Demo Cloud Run backend (single region, testing/validation only)
+- ✅ Private Service Connect (PSC) architecture
+- ✅ CIS compliance, observability, mandatory resource tagging
+
+**Note**: CDN is **optional** and excluded from MVP as it's only required for static content caching. The WAF (Cloud Armor) provides DDoS protection and the Load Balancer hides backend IP addresses.
+
+**Future Extensibility** (Features 002-003):
+- 🔜 Multi-backend support: Application teams can deploy Cloud Run, GKE, or Compute Engine VMs
+- 🔜 Multi-region disaster recovery with automatic health-based failover
+- 🔜 Production application VPC onboarding workflow
+
+### Current Architecture: Single-Region MVP with Demo Backend
+
+The following diagram shows the **implemented architecture** for this feature:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -30,12 +49,6 @@ The following diagram illustrates how incoming traffic is routed from the intern
 │                          │  - Rate limiting  │                              │
 │                          │  - DDoS protection│                              │
 │                          │  - OWASP rules    │                              │
-│                          └─────────┬─────────┘                              │
-│                                    │                                        │
-│                          ┌─────────▼─────────┐                              │
-│                          │   Cloud CDN       │                              │
-│                          │  - Static caching │                              │
-│                          │  - Edge serving   │                              │
 │                          └─────────┬─────────┘                              │
 └────────────────────────────────────┼────────────────────────────────────────┘
                                      │
@@ -122,7 +135,6 @@ The following diagram illustrates how incoming traffic is routed from the intern
 | Layer | Component | Security Feature | Purpose |
 |-------|-----------|------------------|---------|
 | **Edge** | Cloud Armor (WAF) | Rate limiting, DDoS protection, OWASP rules | Blocks malicious traffic before it reaches infrastructure |
-| **Edge** | Cloud CDN | Cache static content, reduce backend load | Improves performance and reduces attack surface |
 | **Load Balancer** | SSL Certificate | TLS 1.2+ encryption | Encrypts data in transit |
 | **Load Balancer** | URL Map | Domain-based routing via Host header | Routes traffic to correct backend based on hostname |
 | **Backend** | Serverless NEG | Serverless network endpoint | Connects load balancer to Cloud Run without public exposure |
@@ -137,7 +149,7 @@ The following diagram illustrates how incoming traffic is routed from the intern
 **✅ Allowed Traffic Path:**
 ```bash
 curl -k -H "Host: example.com" https://34.117.156.60
-# → Cloud Armor → Cloud CDN → HTTPS LB → Backend Service → Serverless NEG → Cloud Run
+# → Cloud Armor → HTTPS LB → Backend Service → Serverless NEG → Cloud Run
 # Result: HTTP 200 OK with demo API response
 ```
 
@@ -147,6 +159,108 @@ curl https://nonprod-demo-api-vbuysgm44q-pd.a.run.app
 # → Direct to Cloud Run URL
 # Result: HTTP 403/404 (blocked by INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER policy)
 ```
+
+---
+
+### Future Architecture: Multi-Backend Support (Features 002-003)
+
+The baseline infrastructure is **architected to support** multiple backend types and multi-region deployments. Future features will extend (not replace) the current architecture.
+
+#### Planned Capabilities
+
+**Multi-Backend Support** (Future Feature 002):
+- Application teams will be able to deploy their own VPCs with Cloud Run, GKE clusters, or Compute Engine VMs
+- Each application VPC connects to the central load balancer via Private Service Connect (PSC)
+- No public IPs on backend services (all traffic flows through central WAF)
+- Domain-based routing maps hostnames to specific application VPCs (e.g., `app1.example.com` → App1 VPC)
+
+**Multi-Region Disaster Recovery** (Future Feature 003):
+- Primary + secondary region configuration per application
+- Automatic health-based failover (60-second RTO)
+- Optional geo-affinity routing (EU users → europe-west1)
+- Active-passive or active-active traffic distribution strategies
+
+#### Target Architecture Diagram
+
+```
+                                    INTERNET
+                                       ↓
+                          ┌────────────────────────┐
+                          │  Global Anycast IP     │
+                          └───────────┬────────────┘
+                                      │
+┌─────────────────────────────────────┼─────────────────────────────────────┐
+│                          EDGE SECURITY LAYER                               │
+│                          ┌──────────▼──────────┐                           │
+│                          │   Cloud Armor (WAF) │                           │
+│                          │  + DDoS protection  │                           │
+│                          └──────────┬──────────┘                           │
+│                                     │                                      │
+│                          ┌──────────▼──────────┐                           │
+│                          │   Cloud CDN         │ (OPTIONAL - only for     │
+│                          │  (if static content)│  static content caching) │
+│                          └──────────┬──────────┘                           │
+└─────────────────────────────────────┼─────────────────────────────────────┘
+                                      │
+┌─────────────────────────────────────┼─────────────────────────────────────┐
+│           GLOBAL LOAD BALANCER (Ingress VPC)                               │
+│                    ┌────────────────▼────────────────┐                     │
+│                    │  HTTPS Load Balancer            │                     │
+│                    │  - Multi-region DR              │                     │
+│                    │  - Host-based routing           │                     │
+│                    └────────────────┬────────────────┘                     │
+│                    ┌────────────────▼────────────────┐                     │
+│                    │      URL Map & Host Rules       │                     │
+│                    │  app1.example.com → App1 VPC    │                     │
+│                    │  app2.example.com → App2 VPC    │                     │
+│                    │  app3.example.com → App3 VPC    │                     │
+│                    └─────┬──────────┬────────┬───────┘                     │
+└──────────────────────────┼──────────┼────────┼─────────────────────────────┘
+                           │          │        │
+        ┌──────────────────┘          │        └──────────────────┐
+        │                             │                           │
+        │                             │                           │
+┌───────▼───────┐          ┌──────────▼────────┐         ┌───────▼────────┐
+│ Backend Svc 1 │          │  Backend Svc 2    │         │ Backend Svc 3  │
+│ (Cloud Run)   │          │  (GKE)            │         │ (Compute VMs)  │
+│ Multi-region  │          │  Multi-region     │         │ Multi-region   │
+└───────┬───────┘          └──────────┬────────┘         └────────┬───────┘
+        │                             │                           │
+┌───────▼────────────────────────────────────────────────────────▼────────┐
+│               PRIVATE SERVICE CONNECT (PSC) LAYER                        │
+│   ┌───────────┐         ┌───────────┐         ┌───────────┐            │
+│   │ PSC NEG   │         │ PSC NEG   │         │ PSC NEG   │            │
+│   │ Serverless│         │ VM IP:PORT│         │ VM IP:PORT│            │
+│   └─────┬─────┘         └─────┬─────┘         └─────┬─────┘            │
+└─────────┼─────────────────────┼─────────────────────┼──────────────────┘
+          │                     │                     │
+┌─────────▼──────┐    ┌─────────▼──────┐    ┌─────────▼──────┐
+│   App1 VPC     │    │   App2 VPC     │    │   App3 VPC     │
+│ (Cloud Run)    │    │   (GKE)        │    │(Compute VMs)   │
+│                │    │                │    │                │
+│ ┌────────────┐ │    │ ┌────────────┐ │    │ ┌────────────┐ │
+│ │ Cloud Run  │ │    │ │GKE Cluster │ │    │ │ Managed    │ │
+│ │ Service    │ │    │ │+ K8s Svc   │ │    │ │ Instance   │ │
+│ │ (Internal) │ │    │ │  (Internal)│ │    │ │ Group (MIG)│ │
+│ │            │ │    │ │            │ │    │ │            │ │
+│ │ + Firewall │ │    │ │ + Firewall │ │    │ │ + Firewall │ │
+│ └────────────┘ │    │ └────────────┘ │    │ └────────────┘ │
+└────────────────┘    └────────────────┘    └────────────────┘
+```
+
+**Key Differences from MVP**:
+- **Multiple Application VPCs**: Each application team deploys their own isolated VPC
+- **Multi-Backend Types**: Support for Cloud Run, GKE, and Compute Engine VMs
+- **Multi-Region**: Primary + secondary regions for each backend with automatic failover
+- **Production Workloads**: Real application services (not just demo/testing)
+
+**Architecture Readiness**:
+- ✅ URL Map already supports multiple host rules (extensible)
+- ✅ Backend services + NEG pattern works for all backend types
+- ✅ PSC demonstrated with demo backend (reusable for production)
+- ✅ Global Load Balancer natively supports multi-region backends
+
+**No Rework Required**: Future features will add new modules and configuration without changing the baseline infrastructure.
 
 ## Project Skeleton
 
