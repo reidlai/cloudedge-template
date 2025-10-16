@@ -10,8 +10,8 @@ The following diagram illustrates how incoming traffic is routed from the intern
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           INTERNET (External Client)                         │
-│                     curl -k -H "Host: example.com" https://34.117.156.60     │
+│                           INTERNET (External Client)                        │
+│                     curl -k -H "Host: example.com" https://34.117.156.60    │
 └────────────────────────────────────┬────────────────────────────────────────┘
                                      │
                                      │ HTTPS (Port 443)
@@ -22,99 +22,99 @@ The following diagram illustrates how incoming traffic is routed from the intern
                           └──────────┬──────────┘
                                      │
 ┌────────────────────────────────────┼────────────────────────────────────────┐
-│                         EDGE SECURITY LAYER                                  │
-│                                    │                                         │
-│                          ┌─────────▼─────────┐                               │
-│                          │   Cloud Armor     │                               │
-│                          │      (WAF)        │                               │
-│                          │  - Rate limiting  │                               │
-│                          │  - DDoS protection│                               │
-│                          │  - OWASP rules    │                               │
-│                          └─────────┬─────────┘                               │
-│                                    │                                         │
-│                          ┌─────────▼─────────┐                               │
-│                          │   Cloud CDN       │                               │
-│                          │  - Static caching │                               │
-│                          │  - Edge serving   │                               │
-│                          └─────────┬─────────┘                               │
+│                         EDGE SECURITY LAYER                                 │
+│                                    │                                        │
+│                          ┌─────────▼─────────┐                              │
+│                          │   Cloud Armor     │                              │
+│                          │      (WAF)        │                              │
+│                          │  - Rate limiting  │                              │
+│                          │  - DDoS protection│                              │
+│                          │  - OWASP rules    │                              │
+│                          └─────────┬─────────┘                              │
+│                                    │                                        │
+│                          ┌─────────▼─────────┐                              │
+│                          │   Cloud CDN       │                              │
+│                          │  - Static caching │                              │
+│                          │  - Edge serving   │                              │
+│                          └─────────┬─────────┘                              │
 └────────────────────────────────────┼────────────────────────────────────────┘
                                      │
 ┌────────────────────────────────────┼────────────────────────────────────────┐
-│                         LOAD BALANCING LAYER                                 │
-│                            (Ingress VPC)                                     │
-│                                    │                                         │
-│                          ┌─────────▼──────────┐                              │
-│                          │  HTTPS Load Balancer│                             │
-│                          │  - SSL termination  │                             │
-│                          │  - URL map routing  │                             │
-│                          │  - Host: example.com│                             │
-│                          └─────────┬───────────┘                             │
-│                                    │                                         │
-│                          ┌─────────▼───────────┐                             │
-│                          │   Backend Service   │                             │
-│                          │ (nonprod-demo-api-  │                             │
-│                          │      backend)       │                             │
-│                          │  - Health checks    │                             │
-│                          │  - Load distribution│                             │
-│                          └─────────┬───────────┘                             │
-│                                    │                                         │
-│                          ┌─────────▼───────────┐                             │
-│                          │  Serverless NEG     │                             │
-│                          │ (Network Endpoint   │                             │
-│                          │      Group)         │                             │
-│                          └─────────┬───────────┘                             │
+│                         LOAD BALANCING LAYER                                │
+│                            (Ingress VPC)                                    │
+│                                    │                                        │
+│                          ┌─────────▼──────────┐                             │
+│                          │  HTTPS Load Balancer│                            │
+│                          │  - SSL termination  │                            │
+│                          │  - URL map routing  │                            │
+│                          │  - Host: example.com│                            │
+│                          └─────────┬───────────┘                            │
+│                                    │                                        │
+│                          ┌─────────▼───────────┐                            │
+│                          │   Backend Service   │                            │
+│                          │ (nonprod-demo-api-  │                            │
+│                          │      backend)       │                            │
+│                          │  - Health checks    │                            │
+│                          │  - Load distribution│                            │
+│                          └─────────┬───────────┘                            │
+│                                    │                                        │
+│                          ┌─────────▼───────────┐                            │
+│                          │  Serverless NEG     │                            │
+│                          │ (Network Endpoint   │                            │
+│                          │      Group)         │                            │
+│                          └─────────┬───────────┘                            │
 └────────────────────────────────────┼────────────────────────────────────────┘
                                      │
                                      │ Internal traffic only
                                      │
 ┌────────────────────────────────────┼────────────────────────────────────────┐
-│                         DEMO BACKEND VPC                                     │
-│                                    │                                         │
-│                          ┌─────────▼───────────┐                             │
-│                          │  VPC Connector      │                             │
-│                          │  10.12.0.0/28       │                             │
-│                          └─────────┬───────────┘                             │
-│                                    │                                         │
-│                          ┌─────────▼───────────┐                             │
-│                          │   Cloud Run Service │                             │
-│                          │  nonprod-demo-api   │                             │
-│                          │                     │                             │
-│                          │  Ingress Policy:    │                             │
-│                          │  INTERNAL_LOAD_     │                             │
-│                          │  BALANCER           │                             │
-│                          │                     │                             │
-│                          │  IAM: roles/run.    │                             │
-│                          │       invoker →     │                             │
-│                          │       allUsers      │                             │
-│                          │                     │                             │
-│                          │  Container:         │                             │
-│                          │  us-docker.pkg.dev/ │                             │
-│                          │  cloudrun/container/│                             │
-│                          │  hello              │                             │
-│                          └─────────────────────┘                             │
-│                                                                               │
-│                          ┌─────────────────────┐                             │
-│                          │  Egress Firewall    │                             │
-│                          │  DENY all egress    │                             │
-│                          │  (default-deny)     │                             │
-│                          └─────────────────────┘                             │
-└───────────────────────────────────────────────────────────────────────────────┘
+│                         DEMO BACKEND VPC                                    │
+│                                    │                                        │
+│                          ┌─────────▼───────────┐                            │
+│                          │  VPC Connector      │                            │
+│                          │  10.12.0.0/28       │                            │
+│                          └─────────┬───────────┘                            │
+│                                    │                                        │
+│                          ┌─────────▼───────────┐                            │
+│                          │   Cloud Run Service │                            │
+│                          │  nonprod-demo-api   │                            │
+│                          │                     │                            │
+│                          │  Ingress Policy:    │                            │
+│                          │  INTERNAL_LOAD_     │                            │
+│                          │  BALANCER           │                            │
+│                          │                     │                            │
+│                          │  IAM: roles/run.    │                            │
+│                          │       invoker →     │                            │
+│                          │       allUsers      │                            │
+│                          │                     │                            │
+│                          │  Container:         │                            │
+│                          │  us-docker.pkg.dev/ │                            │
+│                          │  cloudrun/container/│                            │
+│                          │  hello              │                            │
+│                          └─────────────────────┘                            │
+│                                                                             │
+│                          ┌─────────────────────┐                            │
+│                          │  Egress Firewall    │                            │
+│                          │  DENY all egress    │                            │
+│                          │  (default-deny)     │                            │
+│                          └─────────────────────┘                            │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-┌────────────────────────────────────────────────────────────────────────────┐
-│                         VPC PEERING & ROUTING                                │
-│                                                                              │
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         VPC PEERING & ROUTING                               │
+│                                                                             │
 │   ┌──────────────────┐                           ┌──────────────────┐       │
 │   │   Ingress VPC    │◄─────── Peering ─────────►│   Egress VPC     │       │
 │   │  10.0.1.0/24     │                           │  10.0.2.0/24     │       │
 │   └──────────────────┘                           └──────────────────┘       │
-│            │                                              │                  │
+│            │                                              │                 │
 │            └──────────────► Peering ◄────────────────────┘                  │
-│                                 │                                            │
+│                                 │                                           │
 │                        ┌────────▼────────┐                                  │
 │                        │ Demo Backend VPC│                                  │
 │                        │  (auto-created) │                                  │
 │                        └─────────────────┘                                  │
-└────────────────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Security Controls
@@ -257,13 +257,10 @@ This project employs a two-tiered, Test-Driven Development (TDD) approach as man
 Unit tests are designed to validate the logic of individual OpenTofu modules in isolation, without deploying real resources.
 
 -   **Framework**: OpenTofu Native Testing (`tofu test`)
--   **Location**: `*.tftest.hcl` files within each module's directory.
--   **Execution**: These are run automatically by the pre-commit hook and in the CI pipeline. You can also run them manually.
+-   **Location**: `*.tftest.hcl` files within each module's directory
+-   **Status**: ⚠️ **Not yet implemented** - Native unit tests are planned for future iterations
 
-**How to Run Unit Tests:**
-```bash
-tofu test
-```
+**Note**: Currently, this project uses **Tier 2 integration tests only** (see below). The `tofu test` command will return `0 passed, 0 failed` because no `.tftest.hcl` files exist yet. For testing infrastructure, use the Terratest integration tests described in Tier 2.
 
 ### Tier 2: Integration & BDD Tests (Post-Deployment)
 
@@ -280,18 +277,39 @@ cd tests/integration/gcp
 go test -v -timeout 30m
 ```
 
-**How to Run Smoke Tests:**
-Smoke tests are a critical subset of integration tests, tagged with `@smoke` in the `.feature` files. They are run after a deployment to a real environment (like `nonprod` or `prod`) to quickly verify core functionality.
+**How to Run Specific Tests:**
+You can run individual test suites for faster feedback:
 
-To run only the smoke tests locally, you can use the `--godog.tags` flag:
 ```bash
 cd tests/integration/gcp
-go test -v -timeout 15m --godog.tags=@smoke
+
+# Full baseline test (all 7 components + connectivity)
+go test -v -run TestFullBaseline -timeout 30m
+
+# CIS compliance test
+go test -v -run TestCISCompliance -timeout 20m
+
+# Mandatory tagging test
+go test -v -run TestMandatoryResourceTagging -timeout 20m
+
+# Teardown validation test
+go test -v -run TestTeardown -timeout 20m
 ```
+
+**How to Run Contract Tests:**
+Contract tests validate IaC compliance using Checkov:
+```bash
+cd tests/contract
+go test -v -timeout 10m
+```
+
+**Troubleshooting: "0 passed, 0 failed"**
+
+If you see this message, you likely ran `tofu test` instead of the Go integration tests. This project uses **Terratest (Go)**, not OpenTofu native tests. Use the commands above to run tests.
 
 ### Testing in the CI/CD Pipeline
 
--   **Continuous Integration (CI)**: On every Pull Request, the CI pipeline runs all **Tier 1 Unit Tests**. This provides a fast feedback loop on the correctness of the code.
+-   **Continuous Integration (CI)**: On every Pull Request, the CI pipeline runs static analysis (Checkov, Semgrep) and OpenTofu validation. Unit tests (`.tftest.hcl` files) are planned for future implementation.
 -   **Continuous Deployment (CD)**: After a successful deployment to the `nonprod` environment, the CD pipeline will execute the **Tier 2 Integration and Smoke Tests** against the live infrastructure to ensure it is behaving as expected. This is also where post-deployment DAST scans will be run.
 
 ## Development Workflow
