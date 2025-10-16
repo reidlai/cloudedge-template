@@ -181,8 +181,13 @@ curl https://nonprod-demo-api-vbuysgm44q-pd.a.run.app
 
 1.  **Install OpenTofu**: Follow the official instructions at [https://opentofu.org/docs/intro/install/](https://opentofu.org/docs/intro/install/).
 2.  **Install Go**: Required for running Terratest. Follow instructions at [https://golang.org/doc/install](https://golang.org/doc/install).
-3.  **Configure Cloud Credentials**: For GCP, ensure your credentials are configured as environment variables (e.g., `GOOGLE_APPLICATION_CREDENTIALS`).
-4.  **Enable Required GCP APIs**: Before the first deployment to a new GCP project, you **MUST** manually enable the necessary APIs. This is a one-time setup step that cannot be automated in OpenTofu without circular dependencies.
+3.  **Install Poetry**: Required for Python dependency management (Checkov, Semgrep). Follow instructions at [https://python-poetry.org/docs/#installation](https://python-poetry.org/docs/#installation).
+    ```bash
+    # After installing Poetry, install project dependencies
+    poetry install
+    ```
+4.  **Configure Cloud Credentials**: For GCP, ensure your credentials are configured as environment variables (e.g., `GOOGLE_APPLICATION_CREDENTIALS`).
+5.  **Enable Required GCP APIs**: Before the first deployment to a new GCP project, you **MUST** manually enable the necessary APIs. This is a one-time setup step that cannot be automated in OpenTofu without circular dependencies.
 
     **Why manual enablement?** API enablement requires project-level permissions that create chicken-egg problems if managed in IaC. Additionally, disabling APIs during `tofu destroy` could accidentally delete resources not managed by this project.
 
@@ -299,8 +304,12 @@ go test -v -run TestTeardown -timeout 20m
 **How to Run Contract Tests:**
 Contract tests validate IaC compliance using Checkov:
 ```bash
+# Ensure Poetry dependencies are installed first
+poetry install
+
+# Run contract tests
 cd tests/contract
-go test -v -timeout 10m
+poetry run go test -v -timeout 10m
 ```
 
 **Troubleshooting: "0 passed, 0 failed"**
@@ -320,19 +329,19 @@ This project follows a strict Spec-Driven Development (SDD) workflow and a Git p
 
 Before committing any changes, it is mandatory to run the pre-commit hooks to ensure code quality, formatting, and documentation are up to date.
 
-1.  **Install pre-commit**:
+1.  **Install pre-commit** (via Poetry):
     ```bash
-    pip install pre-commit
+    poetry install
     ```
 
 2.  **Install the hooks**:
     ```bash
-    pre-commit install
+    poetry run pre-commit install
     ```
 
 3.  **Run the hooks**: The hooks will run automatically on `git commit`. You can also run them manually at any time:
     ```bash
-    pre-commit run --all-files
+    poetry run pre-commit run --all-files
     ```
 
 ### Continuous Integration (CI)
