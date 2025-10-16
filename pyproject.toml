@@ -1,0 +1,42 @@
+[tool.poetry]
+name = "vibetics-cloudedge"
+version = "2.0.0"
+description = "Cloud-agnostic IaaS deployment platform with OpenTofu"
+authors = ["Vibetics Infrastructure Team"]
+readme = "README.md"
+license = "Proprietary"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+# Security scanning tools (constitution §7)
+checkov = "^3.2.0"           # IaC security scanner (SCA) - blocks on CRITICAL
+semgrep = "^1.95.0"          # SAST scanner - blocks on CRITICAL
+# Note: gitleaks is a Go binary, install via: go install github.com/gitleaks/gitleaks/v8@latest
+
+[tool.poetry.group.dev.dependencies]
+# Pre-commit hooks
+pre-commit = "^3.8.0"
+
+[tool.poetry.group.test.dependencies]
+# Testing tools
+pytest = "^8.3.0"
+pytest-cov = "^6.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.checkov]
+# Checkov configuration
+framework = ["terraform", "secrets"]
+quiet = true
+compact = true
+soft-fail = false
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+
+[tool.isort]
+profile = "black"
+line_length = 100
