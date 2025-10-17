@@ -13,13 +13,36 @@ The Vibetics CloudEdge platform provides a **6-layer secure baseline infrastruct
 - ✅ Global HTTPS load balancer with domain-based routing capability
 - ✅ Ingress and Egress VPCs with firewall rules
 - ✅ Demo Cloud Run backend (single region, testing/validation only)
-- ✅ Private Service Connect (PSC) architecture
+- ✅ Serverless NEG connectivity (Google-managed private networking for Cloud Run)
 - ✅ CIS compliance, observability, mandatory resource tagging
 
 **Note**: CDN is **optional** and excluded from MVP as it's only required for static content caching. The WAF (Cloud Armor) provides DDoS protection and the Load Balancer hides backend IP addresses.
 
+### Scope: Infrastructure-Only Deployment
+
+**This project provides INFRASTRUCTURE-ONLY deployment.** API management capabilities (authentication, authorization, rate limiting, request validation, API versioning, analytics) are **OUT OF SCOPE** and are the responsibility of applications deployed on this infrastructure.
+
+**What IS Included** (Network-Level Security):
+- ✅ WAF for DDoS protection
+- ✅ Firewall rules and VPC isolation
+- ✅ Load Balancer with domain-based routing
+- ✅ Serverless NEG (Google-managed private connectivity for Cloud Run backends)
+- ✅ Distributed tracing for infrastructure observability
+
+**What is NOT Included** (Application-Level Security):
+- ❌ API Gateway (authentication, rate limiting, request transformation)
+- ❌ API-level security policies (API keys, OAuth, JWT validation)
+- ❌ API analytics and developer portal
+
+**Security Boundary**: The baseline infrastructure provides **network-level security** (WAF, firewall, VPC isolation, Serverless NEG private connectivity). Applications are responsible for **application-level security** (authentication, authorization, input validation). Applications must implement their own API security within their service code or deploy API Gateway (Cloud Endpoints/Apigee) as a separate feature.
+
+**Demo Backend Access**: The demo Cloud Run service uses `allUsers` IAM binding for unauthenticated access from the load balancer. This is intentional for infrastructure validation. Production applications MUST implement proper authentication mechanisms.
+
+For detailed scope information, see [Feature Specification](specs/001-create-cloud-agnostic/spec.md#scope-clarification).
+
 **Future Extensibility** (Features 002-003):
 - 🔜 Multi-backend support: Application teams can deploy Cloud Run, GKE, or Compute Engine VMs
+- 🔜 True Private Service Connect (PSC) with service attachments for GKE/VM backends (full network isolation)
 - 🔜 Multi-region disaster recovery with automatic health-based failover
 - 🔜 Production application VPC onboarding workflow
 
@@ -132,14 +155,17 @@ The following diagram shows the **implemented architecture** for this feature:
 
 ### Key Security Controls
 
+**Defense-in-Depth Strategy**: This architecture implements multiple security layers to protect against various attack vectors.
+
 | Layer | Component | Security Feature | Purpose |
 |-------|-----------|------------------|---------|
 | **Edge** | Cloud Armor (WAF) | Rate limiting, DDoS protection, OWASP rules | Blocks malicious traffic before it reaches infrastructure |
+| **Ingress VPC** | Firewall Source Restriction | Restricts HTTPS traffic to Google Cloud Load Balancer IPs (`35.191.0.0/16`, `130.211.0.0/22`) | **Defense-in-depth**: Even if WAF is bypassed, only GCP load balancer IPs can reach the ingress layer. Override via `allowed_https_source_ranges` variable for testing. |
 | **Load Balancer** | SSL Certificate | TLS 1.2+ encryption | Encrypts data in transit |
 | **Load Balancer** | URL Map | Domain-based routing via Host header | Routes traffic to correct backend based on hostname |
 | **Backend** | Serverless NEG | Serverless network endpoint | Connects load balancer to Cloud Run without public exposure |
 | **Backend** | Cloud Run Ingress | `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` | **Blocks direct public access**, allows only load balancer traffic |
-| **Backend** | IAM Policy | `roles/run.invoker` for `allUsers` | Allows unauthenticated access from load balancer (authenticated at edge) |
+| **Backend** | IAM Policy | `roles/run.invoker` for `allUsers` | **INTENTIONAL for load balancer forwarding**: Cloud Run requires IAM authentication, but Google Cloud Load Balancers cannot provide service account credentials when forwarding traffic. The `allUsers` binding allows the LB to invoke the service. Security is enforced at network layer (WAF, firewall, ingress policy) NOT at Cloud Run IAM layer. |
 | **Network** | VPC Connector | Private connectivity | Cloud Run can access VPC resources securely |
 | **Network** | Egress Firewall | Default-deny all egress | Prevents data exfiltration from compromised containers |
 | **Network** | VPC Peering | Ingress ↔ Egress ↔ Demo Backend | Enables secure internal routing between VPCs |

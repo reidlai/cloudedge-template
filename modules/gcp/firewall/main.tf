@@ -8,7 +8,10 @@ resource "google_compute_firewall" "allow_https" {
     ports    = ["443"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  # SECURITY FIX (S1): Restrict to Google Cloud Load Balancer IP ranges by default
+  # This provides defense-in-depth beyond WAF and Cloud Run ingress policy
+  # Override with ["0.0.0.0/0"] via var.allowed_https_source_ranges if needed for testing
+  source_ranges = var.allowed_https_source_ranges
   target_tags   = ["https-server"]
 }
 

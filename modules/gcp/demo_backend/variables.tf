@@ -18,11 +18,6 @@ variable "resource_tags" {
   type        = map(string)
 }
 
-variable "ingress_vpc_self_link" {
-  description = "The self_link of the main ingress VPC."
-  type        = string
-}
-
 variable "vpc_connector_cidr_range" {
   description = "The CIDR range for the VPC Access Connector."
   type        = string
@@ -45,4 +40,10 @@ variable "demo_api_image" {
   description = "The container image to use for the demo API."
   type        = string
   default     = "us-docker.pkg.dev/cloudrun/container/hello"
+}
+
+variable "enable_logging_bucket" {
+  description = "If set to true, create a Cloud Logging bucket for the demo backend."
+  type        = bool
+  default     = true
 }

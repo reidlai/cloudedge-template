@@ -146,7 +146,8 @@ locals {
 
 # --- Demo Backend Environment ---
 
-# Deploys the secure, internal-only demo API and integrates it with the network.
+# Deploys the secure, internal-only demo backend using PSC (Private Service Connect)
+# PSC connectivity via Serverless NEG - no VPC peering required
 module "demo_backend" {
   count                        = var.enable_demo_backend ? 1 : 0
   source                       = "./modules/gcp/demo_backend"
@@ -154,11 +155,11 @@ module "demo_backend" {
   environment                  = var.environment
   region                       = var.region
   resource_tags                = local.standard_tags
-  ingress_vpc_self_link        = module.ingress_vpc[0].ingress_vpc_self_link
   vpc_connector_cidr_range     = var.vpc_connector_cidr_range
   vpc_connector_min_throughput = var.vpc_connector_min_throughput
   vpc_connector_max_throughput = var.vpc_connector_max_throughput
   demo_api_image               = var.demo_api_image
+  enable_logging_bucket        = var.enable_logging_bucket
 }
 
 # --- Global Load Balancer & Routing ---
@@ -186,17 +187,24 @@ module "dr_loadbalancer" {
   }
 }
 
-# --- Core VPC Peering ---
-
-# Establishes the primary VPC peering connection between the Ingress and Egress VPCs.
-module "inter_vpc_peering" {
-  count              = var.enable_inter_vpc_peering ? 1 : 0
-  source             = "./modules/gcp/inter_vpc_peering"
-  project_id         = var.project_id
-  environment        = var.environment
-  network1_self_link = module.ingress_vpc[0].ingress_vpc_self_link
-  network2_self_link = module.egress_vpc[0].egress_vpc_self_link
-}
+# --- VPC Connectivity ---
+#
+# Fix I1: VPC Peering REMOVED - Not Required for PSC Architecture
+#
+# Cloud Run uses Serverless NEG which provides DIRECT Private Service Connect (PSC)
+# connectivity from the Global Load Balancer to Cloud Run services.
+#
+# VPC Peering is NOT needed because:
+# 1. Serverless NEG creates a PSC endpoint automatically
+# 2. Load balancer → Serverless NEG → Cloud Run (all via PSC)
+# 3. No VPC-to-VPC connectivity required for serverless backends
+#
+# VPC Peering would only be needed for:
+# - GKE backends (Instance Group NEGs)
+# - Compute Engine VMs (VM NEGs)
+# - Future multi-VPC application architectures
+#
+# See plan.md "Architecture Details > Domain-Based Routing" for PSC design rationale.
 
 # --- Billing ---
 

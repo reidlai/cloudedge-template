@@ -61,16 +61,10 @@ resource "google_compute_firewall" "deny_all_egress" {
   destination_ranges = ["0.0.0.0/0"]
 }
 
-# ---Network Integration---
-resource "google_compute_network_peering" "ingress_to_demo" {
-  name         = "${var.environment}-peering-ingress-to-demo"
-  network      = var.ingress_vpc_self_link
-  peer_network = google_compute_network.demo_vpc.self_link
-  depends_on = [
-    google_cloud_run_v2_service.demo_api,
-  ]
-}
-
+# ---Private Service Connect (PSC) Integration---
+# Serverless NEG provides PSC connectivity for Cloud Run
+# This eliminates the need for VPC Peering - the load balancer connects directly
+# to Cloud Run via PSC using the Serverless NEG pattern
 resource "google_compute_region_network_endpoint_group" "serverless_neg" {
   project               = var.project_id
   name                  = "${var.environment}-serverless-neg"
@@ -79,7 +73,6 @@ resource "google_compute_region_network_endpoint_group" "serverless_neg" {
   cloud_run {
     service = google_cloud_run_v2_service.demo_api.name
   }
-  depends_on = [google_compute_network_peering.ingress_to_demo]
 }
 
 resource "google_compute_backend_service" "demo_backend" {
@@ -106,23 +99,45 @@ resource "google_compute_backend_service" "demo_backend" {
 
 # Configure Cloud Logging retention for backend service logs
 # NFR-001 requires 30-day minimum retention for distributed tracing
+# NOTE: Set enable_logging_bucket=false for fast testing iterations to avoid 1-7 day bucket deletion delays
 resource "google_logging_project_sink" "backend_service_logs" {
+  count       = var.enable_logging_bucket ? 1 : 0
   project     = var.project_id
   name        = "${var.environment}-demo-backend-logs-sink"
-  destination = "logging.googleapis.com/projects/${var.project_id}/locations/global/buckets/${google_logging_project_bucket_config.backend_logs_bucket.id}"
+  destination = "logging.googleapis.com/projects/${var.project_id}/locations/global/buckets/${google_logging_project_bucket_config.backend_logs_bucket[0].id}"
   filter      = "resource.type=\"http_load_balancer\" AND resource.labels.backend_service_name=\"${google_compute_backend_service.demo_backend.name}\""
 }
 
 resource "google_logging_project_bucket_config" "backend_logs_bucket" {
+  count          = var.enable_logging_bucket ? 1 : 0
   project        = var.project_id
   location       = "global"
   retention_days = 30 # NFR-001: 30-day trace data retention
   bucket_id      = "${var.environment}-demo-backend-logs"
   description    = "30-day retention bucket for demo backend service logs (NFR-001 compliance)"
+
+  # Note: lifecycle_state is managed by the provider and cannot be configured
+  # The bucket transitions through states: CREATING -> ACTIVE -> DELETE_REQUESTED -> DELETED
+  # No lifecycle block needed as lifecycle_state is read-only
 }
 
 # Grant Cloud Run Invoker role to allow unauthenticated access from load balancer
-# This is required for internal-only Cloud Run services accessed via load balancer
+#
+# SECURITY NOTE: This uses allUsers for INFRASTRUCTURE VALIDATION ONLY
+#
+# Why allUsers is used:
+# - Cloud Run with INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER requires IAM authentication
+# - Load balancers cannot authenticate with service accounts when forwarding traffic
+# - allUsers allows the load balancer to invoke the service without auth credentials
+#
+# Security Boundary:
+# - Network-level security: WAF (DDoS), Firewall rules, VPC isolation, PSC
+# - Application-level security: OUT OF SCOPE (see plan.md "API Management" section)
+#
+# Production Recommendation:
+# - Applications should implement authentication WITHIN their service code
+# - OR deploy API Gateway (Cloud Endpoints/Apigee) for API-level auth
+# - This infrastructure provides NETWORK security, not APPLICATION security
 resource "google_cloud_run_service_iam_member" "invoker" {
   project  = var.project_id
   service  = google_cloud_run_v2_service.demo_api.name

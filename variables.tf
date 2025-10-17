@@ -129,11 +129,9 @@ variable "enable_dr_loadbalancer" {
   default     = false
 }
 
-variable "enable_inter_vpc_peering" {
-  description = "If set to true, the inter_vpc_peering module will be enabled."
-  type        = bool
-  default     = false
-}
+# Fix I1: VPC Peering variable removed - not required for PSC architecture
+# Cloud Run uses Serverless NEG for direct PSC connectivity to load balancer
+# VPC Peering only needed for GKE/VM backends (future feature)
 
 variable "enable_self_signed_cert" {
   description = "If true, use the self-signed certificate module for the load balancer. Otherwise, create a Google-managed SSL certificate."
@@ -151,6 +149,12 @@ variable "enable_cdn" {
   description = "If set to true, the cdn module will be enabled."
   type        = bool
   default     = false
+}
+
+variable "enable_logging_bucket" {
+  description = "If set to true, create a Cloud Logging bucket for the demo backend (NFR-001 compliance). Set to false for fast testing iterations to avoid 1-7 day bucket deletion delays."
+  type        = bool
+  default     = true
 }
 
 

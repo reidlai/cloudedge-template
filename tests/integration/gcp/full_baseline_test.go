@@ -32,8 +32,9 @@ func TestFullBaseline(t *testing.T) {
 			"enable_cdn":              true,
 			"enable_dr_loadbalancer":  true,
 			"enable_demo_backend":     true,
-			"enable_inter_vpc_peering": true,
+			// Fix I1: VPC peering removed - not required for PSC architecture
 			"enable_self_signed_cert": true,
+			"enable_logging_bucket":   false, // Fast teardown for testing
 		},
 	}
 

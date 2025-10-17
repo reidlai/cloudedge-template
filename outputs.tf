@@ -52,3 +52,9 @@ output "access_instructions" {
     EOT
   ) : "Load balancer not enabled"
 }
+
+# Firewall Outputs (for testing and validation)
+output "firewall_rule_name" {
+  description = "The name of the ingress VPC HTTPS firewall rule (for integration testing)"
+  value       = var.enable_firewall ? module.firewall[0].firewall_rule_name : null
+}
