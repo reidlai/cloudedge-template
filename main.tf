@@ -149,17 +149,14 @@ locals {
 # Deploys the secure, internal-only demo backend using PSC (Private Service Connect)
 # PSC connectivity via Serverless NEG - no VPC peering required
 module "demo_backend" {
-  count                        = var.enable_demo_backend ? 1 : 0
-  source                       = "./modules/gcp/demo_backend"
-  project_id                   = var.project_id
-  environment                  = var.environment
-  region                       = var.region
-  resource_tags                = local.standard_tags
-  vpc_connector_cidr_range     = var.vpc_connector_cidr_range
-  vpc_connector_min_throughput = var.vpc_connector_min_throughput
-  vpc_connector_max_throughput = var.vpc_connector_max_throughput
-  demo_api_image               = var.demo_api_image
-  enable_logging_bucket        = var.enable_logging_bucket
+  count                 = var.enable_demo_backend ? 1 : 0
+  source                = "./modules/gcp/demo_backend"
+  project_id            = var.project_id
+  environment           = var.environment
+  region                = var.region
+  resource_tags         = local.standard_tags
+  demo_api_image        = var.demo_api_image
+  enable_logging_bucket = var.enable_logging_bucket
 }
 
 # --- Global Load Balancer & Routing ---

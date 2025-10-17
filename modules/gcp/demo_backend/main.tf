@@ -1,24 +1,5 @@
-# ---VPC for the Cloud Run service---
-resource "google_compute_network" "demo_vpc" {
-  project                 = var.project_id
-  name                    = "${var.environment}-demo-backend-vpc"
-  auto_create_subnetworks = false
-}
-
-# ---VPC Connector for Cloud Run to access the VPC---
-# Note: This requires the vpcaccess.googleapis.com API to be enabled.
-resource "google_vpc_access_connector" "connector" {
-  project        = var.project_id
-  name           = "${var.environment}-vpc-connector"
-  region         = var.region
-  network        = google_compute_network.demo_vpc.name
-  ip_cidr_range  = var.vpc_connector_cidr_range
-  min_throughput = var.vpc_connector_min_throughput
-  max_throughput = var.vpc_connector_max_throughput
-  depends_on     = [google_compute_network.demo_vpc]
-}
-
 # ---Cloud Run service for the demo API---
+# Note: Uses Serverless NEG for Load Balancer connectivity (no VPC Connector needed)
 resource "google_cloud_run_v2_service" "demo_api" {
   project  = var.project_id
   name     = "${var.environment}-demo-api"
@@ -28,43 +9,25 @@ resource "google_cloud_run_v2_service" "demo_api" {
     containers {
       image = var.demo_api_image
     }
-    vpc_access {
-      connector = google_vpc_access_connector.connector.id
-      egress    = "ALL_TRAFFIC"
-    }
     scaling {
       min_instance_count = 0 # Scale to zero for cost-effectiveness
     }
     labels = var.resource_tags
   }
 
-  # Allow traffic from Google Cloud Load Balancers and internal VPC
-  # INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER allows both internal VPC access
-  # and access from Google Cloud Load Balancers (required for this architecture)
+  # Allow traffic from Google Cloud Load Balancers only
+  # INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER restricts access to:
+  # - Google Cloud Load Balancers (via Serverless NEG)
+  # - Internal VPC traffic (if VPC Connector were configured)
   ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   deletion_protection = false
   labels              = var.resource_tags
 }
 
-# ---Default-deny egress firewall rule for the demo VPC---
-resource "google_compute_firewall" "deny_all_egress" {
-  project   = var.project_id
-  name      = "${var.environment}-demo-deny-all-egress"
-  network   = google_compute_network.demo_vpc.name
-  direction = "EGRESS"
-  priority  = 65535 # Lowest priority
-
-  deny {
-    protocol = "all"
-  }
-
-  destination_ranges = ["0.0.0.0/0"]
-}
-
-# ---Private Service Connect (PSC) Integration---
-# Serverless NEG provides PSC connectivity for Cloud Run
-# This eliminates the need for VPC Peering - the load balancer connects directly
-# to Cloud Run via PSC using the Serverless NEG pattern
+# ---Serverless NEG for Load Balancer Integration---
+# Serverless NEG provides Google-managed connectivity for Cloud Run
+# No VPC Connector needed - the load balancer connects directly to Cloud Run
+# via Google's internal networking infrastructure
 resource "google_compute_region_network_endpoint_group" "serverless_neg" {
   project               = var.project_id
   name                  = "${var.environment}-serverless-neg"

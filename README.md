@@ -104,12 +104,10 @@ The following diagram shows the **implemented architecture** for this feature:
                                      │ Internal traffic only
                                      │
 ┌────────────────────────────────────┼────────────────────────────────────────┐
-│                         DEMO BACKEND VPC                                    │
+│                      CLOUD RUN BACKEND (Serverless)                         │
 │                                    │                                        │
-│                          ┌─────────▼───────────┐                            │
-│                          │  VPC Connector      │                            │
-│                          │  10.12.0.0/28       │                            │
-│                          └─────────┬───────────┘                            │
+│                                    │ Google-managed private connectivity    │
+│                                    │ (Serverless NEG handles routing)       │
 │                                    │                                        │
 │                          ┌─────────▼───────────┐                            │
 │                          │   Cloud Run Service │                            │
@@ -127,29 +125,13 @@ The following diagram shows the **implemented architecture** for this feature:
 │                          │  us-docker.pkg.dev/ │                            │
 │                          │  cloudrun/container/│                            │
 │                          │  hello              │                            │
+│                          │                     │                            │
+│                          │  Note: No VPC       │                            │
+│                          │  Connector needed - │                            │
+│                          │  Serverless NEG     │                            │
+│                          │  provides direct    │                            │
+│                          │  connectivity       │                            │
 │                          └─────────────────────┘                            │
-│                                                                             │
-│                          ┌─────────────────────┐                            │
-│                          │  Egress Firewall    │                            │
-│                          │  DENY all egress    │                            │
-│                          │  (default-deny)     │                            │
-│                          └─────────────────────┘                            │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         VPC PEERING & ROUTING                               │
-│                                                                             │
-│   ┌──────────────────┐                           ┌──────────────────┐       │
-│   │   Ingress VPC    │◄─────── Peering ─────────►│   Egress VPC     │       │
-│   │  10.0.1.0/24     │                           │  10.0.2.0/24     │       │
-│   └──────────────────┘                           └──────────────────┘       │
-│            │                                              │                 │
-│            └──────────────► Peering ◄────────────────────┘                  │
-│                                 │                                           │
-│                        ┌────────▼────────┐                                  │
-│                        │ Demo Backend VPC│                                  │
-│                        │  (auto-created) │                                  │
-│                        └─────────────────┘                                  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -166,9 +148,7 @@ The following diagram shows the **implemented architecture** for this feature:
 | **Backend** | Serverless NEG | Serverless network endpoint | Connects load balancer to Cloud Run without public exposure |
 | **Backend** | Cloud Run Ingress | `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` | **Blocks direct public access**, allows only load balancer traffic |
 | **Backend** | IAM Policy | `roles/run.invoker` for `allUsers` | **INTENTIONAL for load balancer forwarding**: Cloud Run requires IAM authentication, but Google Cloud Load Balancers cannot provide service account credentials when forwarding traffic. The `allUsers` binding allows the LB to invoke the service. Security is enforced at network layer (WAF, firewall, ingress policy) NOT at Cloud Run IAM layer. |
-| **Network** | VPC Connector | Private connectivity | Cloud Run can access VPC resources securely |
-| **Network** | Egress Firewall | Default-deny all egress | Prevents data exfiltration from compromised containers |
-| **Network** | VPC Peering | Ingress ↔ Egress ↔ Demo Backend | Enables secure internal routing between VPCs |
+| **Backend** | Serverless NEG | Google-managed networking | Direct Load Balancer → Cloud Run connectivity via Google's private network (no VPC Connector needed for serverless backends) |
 
 ### Access Validation
 
@@ -185,6 +165,13 @@ curl https://nonprod-demo-api-vbuysgm44q-pd.a.run.app
 # → Direct to Cloud Run URL
 # Result: HTTP 403/404 (blocked by INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER policy)
 ```
+
+### VPC Connectivity Scenarios
+
+| Scenario                                          | Recommended Solution                               | Why It's Better                                                                                                                            |
+| :------------------------------------------------ | :------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------|
+| Ingress VPC to Cloud Run (Same Project/Organization)        | Internal ALB + Serverless NEG + Cloud Run        | Simpler to configure than PSC, lower complexity, and avoids the "managed service" abstraction when one is not needed.                     |
+| Ingress VPC to VPC B (Different Projects/Organizations) | Private Service Connect (PSC)                      | This is the main use case for PSC. It is designed specifically to allow private consumption of a "published service" across security or administrative boundaries without VPC peering. |
 
 ---
 
@@ -338,22 +325,134 @@ The baseline infrastructure is **architected to support** multiple backend types
       --project="$TF_VAR_project_id" \
       compute.googleapis.com \
       run.googleapis.com \
-      vpcaccess.googleapis.com \
       cloudresourcemanager.googleapis.com
     ```
 
     **Required APIs**:
-    - `compute.googleapis.com` - Compute Engine (VPCs, Load Balancers, Firewalls, SSL Certificates)
+    - `compute.googleapis.com` - Compute Engine (VPCs, Load Balancers, Firewalls, SSL Certificates, Serverless NEG)
     - `run.googleapis.com` - Cloud Run (Serverless container platform for demo backend)
-    - `vpcaccess.googleapis.com` - VPC Access Connector (Cloud Run to VPC connectivity)
     - `cloudresourcemanager.googleapis.com` - Resource Manager (Project metadata and IAM)
+
+    **Note**: VPC Access Connector API (`vpcaccess.googleapis.com`) is **NOT required** - Serverless NEG provides direct connectivity without VPC Connector.
 
     **Verification**: Confirm all APIs are enabled before running `tofu init`:
     ```bash
-    gcloud services list --enabled --project="$TF_VAR_project_id" | grep -E 'compute|run|vpcaccess|cloudresourcemanager'
+    gcloud services list --enabled --project="$TF_VAR_project_id" | grep -E 'compute|run|cloudresourcemanager'
     ```
 
     If any APIs are missing, you'll encounter errors during `tofu plan` or `tofu apply`.
+
+6.  **Grant Deployment IAM Roles**: The account or service account running `tofu apply` requires specific IAM permissions to create and manage GCP resources. This is a **one-time setup per environment** that must be completed before your first deployment.
+
+    **Why manual IAM role assignment?** OpenTofu cannot grant itself the permissions it needs to run (chicken-and-egg problem). These permissions must be configured outside of the IaC repository. Additionally, managing IAM credentials or service account keys in code would violate security best practices.
+
+    **Identify your deployment account**:
+    ```bash
+    # Check which account is currently active
+    gcloud auth list
+
+    # View current account
+    gcloud config get-value account
+    ```
+
+    **Required IAM Roles**:
+
+    The deployment account needs the following roles to provision all infrastructure components:
+
+    | Role | Purpose | Resources Managed |
+    |------|---------|-------------------|
+    | `roles/run.admin` | Cloud Run administration | Create/update/delete Cloud Run services, configure ingress policies, manage IAM bindings |
+    | `roles/compute.networkAdmin` | Network resource management | Create VPCs, subnets, firewall rules, load balancers, forwarding rules, backend services, NEGs |
+    | `roles/compute.securityAdmin` | Security policy management | Create/manage Cloud Armor (WAF) security policies, SSL certificates |
+    | `roles/compute.loadBalancerAdmin` | Load balancer configuration | Configure global external HTTPS load balancers, URL maps, target proxies, health checks |
+    | `roles/iam.serviceAccountUser` | Service account impersonation | Allow Cloud Run services to use service accounts for authentication |
+
+    **Grant roles to your user account** (for local development):
+    ```bash
+    # Set your project ID and account
+    PROJECT_ID="vibetics-nonprod-475417"  # Replace with your project ID
+    ACCOUNT=$(gcloud config get-value account)
+
+    # Grant all required roles
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+      --member="user:$ACCOUNT" \
+      --role="roles/run.admin"
+
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+      --member="user:$ACCOUNT" \
+      --role="roles/compute.networkAdmin"
+
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+      --member="user:$ACCOUNT" \
+      --role="roles/compute.securityAdmin"
+
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+      --member="user:$ACCOUNT" \
+      --role="roles/compute.loadBalancerAdmin"
+
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+      --member="user:$ACCOUNT" \
+      --role="roles/iam.serviceAccountUser"
+    ```
+
+    **Grant roles to a service account** (for CI/CD pipelines):
+    ```bash
+    # Create a service account for deployment automation
+    SERVICE_ACCOUNT_NAME="opentofu-deployer"
+    PROJECT_ID="vibetics-nonprod-475417"  # Replace with your project ID
+
+    gcloud iam service-accounts create $SERVICE_ACCOUNT_NAME \
+      --display-name="OpenTofu Deployment Service Account" \
+      --project=$PROJECT_ID
+
+    # Get the service account email
+    SA_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+    # Grant all required roles to the service account
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+      --member="serviceAccount:$SA_EMAIL" \
+      --role="roles/run.admin"
+
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+      --member="serviceAccount:$SA_EMAIL" \
+      --role="roles/compute.networkAdmin"
+
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+      --member="serviceAccount:$SA_EMAIL" \
+      --role="roles/compute.securityAdmin"
+
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+      --member="serviceAccount:$SA_EMAIL" \
+      --role="roles/compute.loadBalancerAdmin"
+
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+      --member="serviceAccount:$SA_EMAIL" \
+      --role="roles/iam.serviceAccountUser"
+    ```
+
+    **Verification**: Confirm IAM roles are assigned (may take 60-120 seconds to propagate):
+    ```bash
+    # For user accounts
+    gcloud projects get-iam-policy $PROJECT_ID \
+      --flatten="bindings[].members" \
+      --filter="bindings.members:user:$ACCOUNT" \
+      --format="table(bindings.role)"
+
+    # For service accounts
+    gcloud projects get-iam-policy $PROJECT_ID \
+      --flatten="bindings[].members" \
+      --filter="bindings.members:serviceAccount:$SA_EMAIL" \
+      --format="table(bindings.role)"
+    ```
+
+    **Expected output**: You should see all 5 roles listed in the output.
+
+    **Troubleshooting**:
+    - **Error: "Permission denied"** during role assignment → You need `roles/resourcemanager.projectIamAdmin` or `roles/owner` on the project to grant roles
+    - **Error: "Error 403: Permission 'X' denied"** during deployment → The listed permission is missing; re-run the role assignment commands above
+    - **Roles not showing in verification** → IAM changes can take up to 2 minutes to propagate; wait and re-run verification
+
+    **Security Note**: These roles follow the **principle of least privilege** for infrastructure deployment. The `roles/editor` or `roles/owner` roles are NOT recommended as they grant excessive permissions beyond what's needed for this deployment.
 
 ### Deployment
 
