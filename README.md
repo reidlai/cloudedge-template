@@ -454,6 +454,51 @@ The baseline infrastructure is **architected to support** multiple backend types
 
     **Security Note**: These roles follow the **principle of least privilege** for infrastructure deployment. The `roles/editor` or `roles/owner` roles are NOT recommended as they grant excessive permissions beyond what's needed for this deployment.
 
+7.  **Refresh Application Default Credentials (ADC)**: After granting IAM roles to your account, you **MUST** refresh your Application Default Credentials so that OpenTofu can use your updated permissions. This is a **critical step** that is often missed.
+
+    **Why is this required?** Google Cloud uses two separate credential systems:
+
+    | Credential Type | Command | Used By | When to Refresh |
+    |-----------------|---------|---------|-----------------|
+    | **User Credentials** | `gcloud auth login` | gcloud CLI commands | When switching Google accounts |
+    | **Application Default Credentials (ADC)** | `gcloud auth application-default login` | OpenTofu, GCP client libraries, SDKs | **After granting new IAM roles** |
+
+    When you grant IAM roles to your user account (step 6), those permissions are attached to your Google identity. However, OpenTofu doesn't use your `gcloud auth login` credentials - it uses **Application Default Credentials (ADC)**, which are separate and need to be refreshed separately.
+
+    **Refresh ADC credentials**:
+    ```bash
+    gcloud auth application-default login
+    ```
+
+    This command will:
+    1. Open your browser automatically
+    2. Prompt you to sign in with your Google account (use the same account from step 6)
+    3. Ask you to grant permissions to "Google Auth Library"
+    4. Save the new credentials to `~/.config/gcloud/application_default_credentials.json`
+
+    **Wait for the terminal to show**: `Credentials saved to file: [/home/user/.config/gcloud/application_default_credentials.json]`
+
+    **Verify ADC credentials are refreshed**:
+    ```bash
+    # Check that a new access token is generated
+    gcloud auth application-default print-access-token | cut -c1-50
+    ```
+
+    You should see an access token starting with `ya29.` (first 50 characters shown).
+
+    **Common Errors if ADC is Not Refreshed**:
+    - `Error: Error creating Network: googleapi: Error 403: Required 'compute.networks.create' permission`
+    - `Error: Error creating FirewallRule: googleapi: Error 403: Insufficient Permission`
+    - `Error: Error creating Address: googleapi: Error 403: Required 'compute.addresses.create' permission`
+
+    If you see any 403 permission errors during `tofu apply` **even after granting IAM roles**, it means you forgot this step. Simply run `gcloud auth application-default login` and retry.
+
+    **When to Refresh ADC**:
+    - ✅ **Required**: After granting new IAM roles to your user account (first-time setup)
+    - ✅ **Required**: After switching to a different Google Cloud project
+    - ✅ **Required**: If you see 403 permission errors during OpenTofu operations
+    - ❌ **Not required**: When running regular `gcloud` commands (those use user credentials)
+
 ### Deployment
 
 1.  **Clone the repository**:
