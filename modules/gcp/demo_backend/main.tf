@@ -49,8 +49,8 @@ resource "google_compute_backend_service" "demo_backend" {
   cdn_policy {
     # Enable Cloud CDN for this backend
     cache_key_policy {
-      include_host = true
-      include_protocol = true
+      include_host         = true
+      include_protocol     = true
       include_query_string = true
     }
   }

@@ -28,9 +28,9 @@ variable "path_matchers" {
 
   description = "A map of path matchers for the URL map."
 
-  type        = any
+  type = any
 
-  default     = {}
+  default = {}
 
 }
 
@@ -40,7 +40,7 @@ variable "ssl_certificates" {
 
   description = "A list of SSL certificate self_links to attach to the HTTPS proxy."
 
-  type        = list(string)
+  type = list(string)
 
 }
 

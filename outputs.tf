@@ -35,7 +35,7 @@ output "access_instructions" {
 
     IMPORTANT: Access via Load Balancer Only
     -----------------------------------------
-    The Cloud Run service uses INGRESS_TRAFFIC_INTERNAL_AND_LOAD_BALANCER, which means:
+    The Cloud Run service uses INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER, which means:
     - Direct public access to Cloud Run URLs is BLOCKED (returns 403/404)
     - Traffic is only allowed from Google Cloud Load Balancers and internal VPC
     - All external traffic MUST go through the load balancer

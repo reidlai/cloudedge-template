@@ -40,11 +40,11 @@ resource "google_compute_target_https_proxy" "https_proxy" {
 }
 
 resource "google_compute_global_forwarding_rule" "forwarding_rule" {
-  project      = var.project_id
-  name         = "${var.environment}-forwarding-rule"
-  target       = google_compute_target_https_proxy.https_proxy.id
-  ip_address   = google_compute_global_address.lb_ip.address
-  port_range   = "443"
+  project    = var.project_id
+  name       = "${var.environment}-forwarding-rule"
+  target     = google_compute_target_https_proxy.https_proxy.id
+  ip_address = google_compute_global_address.lb_ip.address
+  port_range = "443"
 }
 
 output "lb_frontend_ip" {

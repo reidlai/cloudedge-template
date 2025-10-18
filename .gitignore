@@ -10,6 +10,13 @@ Thumbs.db
 *.tfvars
 .terraform.lock.hcl
 
+# Backend Configuration (Auto-generated)
+backend-config.hcl
+terraform.tfstate.local.backup.*
+
+# TFLint Module Configs (Auto-copied from root)
+modules/**/.tflint.hcl
+
 # Go Artifacts (For Terratest)
 *.exe
 *.test
