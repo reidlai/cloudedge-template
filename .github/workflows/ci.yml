@@ -345,58 +345,17 @@ jobs:
           fi
 
   # ============================================================================
-  # Job 5: OpenTofu Plan
-  # Note: Format/validate checks are handled by pre-commit hooks in Job 1
+  # Note: OpenTofu validation (fmt/validate/tflint) is handled by pre-commit
+  # hooks in Job 1 (scan-and-build). No separate plan job needed in CI.
   # ============================================================================
-  terraform-plan:
-    name: OpenTofu Plan
-    runs-on: ubuntu-latest
-    needs: scan-and-build
-    if: github.event_name == 'pull_request'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v1
-        with:
-          tofu_version: ${{ env.TOFU_VERSION }}
-
-      - name: Create local backend config for CI
-        run: |
-          # Override GCS backend with local backend for CI
-          # We're only planning (not applying), so we don't need remote state
-          cat > backend-override.tf <<EOF
-          terraform {
-            backend "local" {
-              path = "terraform.tfstate"
-            }
-          }
-          EOF
-
-      - name: OpenTofu Init
-        run: tofu init -reconfigure
-
-      - name: OpenTofu Plan
-        run: tofu plan -out=plan.tfplan
-        env:
-          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID || 'dummy-project-id' }}
-
-      - name: Upload plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tofu-plan
-          path: plan.tfplan
-          retention-days: 7
 
   # ============================================================================
-  # Job 6: Summary
+  # Job 5: Summary
   # ============================================================================
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [scan-and-build, threat-modeling, threat-gate, terraform-plan]
+    needs: [scan-and-build, threat-modeling, threat-gate]
     if: always()
 
     steps:
@@ -431,20 +390,12 @@ jobs:
             echo " **Threat gate**: Skipped" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # OpenTofu Plan
-          if [ "${{ needs.terraform-plan.result }}" == "success" ]; then
-            echo " **OpenTofu plan**: Generated" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.terraform-plan.result }}" == "skipped" ]; then
-            echo " **OpenTofu plan**: Skipped (not a PR)" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "L **OpenTofu plan**: Failed" >> $GITHUB_STEP_SUMMARY
-          fi
+          # Note: OpenTofu validation handled by pre-commit hooks
 
       - name: Overall status
         run: |
           if [ "${{ needs.scan-and-build.result }}" != "success" ] || \
-             [ "${{ needs.threat-gate.result }}" == "failure" ] || \
-             ([ "${{ needs.terraform-plan.result }}" == "failure" ]); then
+             [ "${{ needs.threat-gate.result }}" == "failure" ]; then
             echo "::error::CI pipeline failed - check individual job results"
             exit 1
           fi
