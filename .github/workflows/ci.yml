@@ -363,13 +363,25 @@ jobs:
         with:
           tofu_version: ${{ env.TOFU_VERSION }}
 
+      - name: Create local backend config for CI
+        run: |
+          # Override GCS backend with local backend for CI
+          # We're only planning (not applying), so we don't need remote state
+          cat > backend-override.tf <<EOF
+          terraform {
+            backend "local" {
+              path = "terraform.tfstate"
+            }
+          }
+          EOF
+
       - name: OpenTofu Init
-        run: tofu init -backend=false
+        run: tofu init -reconfigure
 
       - name: OpenTofu Plan
         run: tofu plan -out=plan.tfplan
         env:
-          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID || 'dummy-project-id' }}
 
       - name: Upload plan
         uses: actions/upload-artifact@v4
