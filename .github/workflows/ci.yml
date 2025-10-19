@@ -70,6 +70,9 @@ jobs:
         with:
           tflint_version: 'latest'
 
+      - name: Initialize TFLint plugins
+        run: tflint --init --config=.tflint.hcl
+
       - name: Cache pre-commit hooks
         uses: actions/cache@v4
         with:
