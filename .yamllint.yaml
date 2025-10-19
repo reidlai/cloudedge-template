@@ -1,0 +1,122 @@
+# yamllint Configuration
+# YAML linting rules for consistency and quality
+# Referenced by: pre-commit-config.yaml
+#
+# Documentation: https://yamllint.readthedocs.io/en/stable/rules.html
+
+---
+extends: default
+
+# Ignore paths
+ignore: |
+  .github/workflows/
+  .terraform/
+  .external_modules/
+  venv/
+  .venv/
+  node_modules/
+  threat_modelling/test-*.yaml
+
+rules:
+  # Braces: require spaces inside braces { }
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+    min-spaces-inside-empty: 0
+    max-spaces-inside-empty: 0
+
+  # Brackets: require spaces inside brackets [ ]
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+    min-spaces-inside-empty: 0
+    max-spaces-inside-empty: 0
+
+  # Colons: require space after colon
+  colons:
+    max-spaces-before: 0
+    max-spaces-after: 1
+
+  # Commas: require space after comma
+  commas:
+    max-spaces-before: 0
+    min-spaces-after: 1
+    max-spaces-after: 1
+
+  # Comments: require space after # and allow standalone comments
+  comments:
+    level: warning
+    require-starting-space: true
+    ignore-shebangs: true
+    min-spaces-from-content: 1  # Relaxed from 2 to 1 for inline comments
+
+  # Comments indentation: match content indentation
+  comments-indentation:
+    level: warning
+
+  # Document end: don't require ---
+  document-end: disable
+
+  # Document start: don't require ---
+  document-start: disable
+
+  # Empty lines: max 2 blank lines
+  empty-lines:
+    max: 2
+    max-start: 0
+    max-end: 1
+
+  # Empty values: allow empty values
+  empty-values:
+    forbid-in-block-mappings: false
+    forbid-in-flow-mappings: true
+
+  # Hyphens: consistent spacing
+  hyphens:
+    max-spaces-after: 1
+
+  # Indentation: 2 spaces
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+
+  # Key duplicates: forbid duplicate keys
+  key-duplicates: enable
+
+  # Key ordering: don't enforce key ordering
+  key-ordering: disable
+
+  # Line length: max 300 characters (relaxed for technical docs)
+  line-length:
+    max: 300
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+    level: warning
+
+  # New line at end of file
+  new-line-at-end-of-file: enable
+
+  # New lines: use \n (LF)
+  new-lines:
+    type: unix
+
+  # Octal values: forbid implicit octal values
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: false
+
+  # Quoted strings: don't enforce quoting style
+  quoted-strings:
+    quote-type: any
+    required: false
+    check-keys: false
+
+  # Trailing spaces: forbid trailing spaces
+  trailing-spaces: enable
+
+  # Truthy: allow yes/no/on/off
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no', 'on', 'off']
+    check-keys: false
+    level: warning

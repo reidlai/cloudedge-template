@@ -43,5 +43,3 @@ variable "ssl_certificates" {
   type = list(string)
 
 }
-
-

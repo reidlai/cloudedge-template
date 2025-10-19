@@ -13,8 +13,3 @@ resource "google_compute_backend_bucket" "cdn_backend" {
     serve_while_stale = 86400
   }
 }
-
-output "cdn_backend_id" {
-  description = "The ID of the CDN backend bucket"
-  value       = google_compute_backend_bucket.cdn_backend.id
-}

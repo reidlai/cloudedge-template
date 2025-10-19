@@ -138,5 +138,3 @@ variable "enable_logging_bucket" {
   type        = bool
   default     = true
 }
-
-

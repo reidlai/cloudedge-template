@@ -1,0 +1,99 @@
+# Checkov Configuration
+# IaC security and compliance scanning configuration
+# Referenced by: pre-commit-config.yaml (ci-iac-compliance gate)
+#
+# Documentation: https://www.checkov.io/2.Basics/CLI%20Command%20Reference.html
+
+# Directories to scan
+directory:
+  - .
+
+# Frameworks to scan
+framework:
+  - terraform
+
+# Output format
+output: cli
+
+# Compact output (less verbose)
+compact: true
+
+# Quiet mode (only show failures)
+quiet: false
+
+# Download external modules for scanning
+download-external-modules: true
+
+# External modules download path
+external-modules-download-path: .external_modules
+
+# Severity threshold (CRITICAL, HIGH, MEDIUM, LOW)
+# Constitution §7: CRITICAL/HIGH findings block PR
+# Note: Use --hard-fail-on in pre-commit hook for severity filtering
+hard-fail-on: CRITICAL,HIGH
+
+# Skip specific checks (use sparingly, document rationale)
+skip-check:
+  # Example: Skip check for specific resources
+  # - CKV_GCP_1  # GCP VM instances should not have public IP addresses
+  #
+  # NOTE: For production, remove all skips or add waiver documentation
+  # Waivers require Security Lead + PO approval (constitution §Waiver Process)
+
+# Run only specific checks (alternative to skip-check)
+# check:
+#   - CKV_GCP_*  # Only run GCP checks
+
+# Exclude paths from scanning
+skip-path:
+  - .terraform/
+  - .external_modules/
+  - .git/
+  - venv/
+  - .venv/
+  - node_modules/
+  - tests/fixtures/
+
+# Suppress specific checks for specific files/resources
+# Use this for documented waivers only
+# skip-resources-without-violations: false
+
+# Enable/disable specific features
+enable-secret-scan-all-files: false  # gitleaks handles secret scanning
+
+# Soft fail mode (don't exit with error code)
+# Set to true for warning-only mode during migration
+soft-fail: false
+
+# Baseline file (ignore existing violations)
+# baseline: .checkov.baseline
+
+# Policy metadata
+repo-root-for-plan-enrichment: .
+
+# CIS Benchmark compliance
+# Automatically checks against CIS benchmarks for supported cloud providers
+# GCP CIS 1.3.0 baseline enabled by default
+
+# Custom policies directory (if using custom Checkov policies)
+# external-checks-dir:
+#   - ./custom-policies/
+
+# Output file paths (for CI/CD integration)
+# output-file-path: /dev/stdout
+
+# Enable GitHub Actions annotations
+# github-action-output: true
+
+# Summary position (top or bottom)
+summary-position: bottom
+
+# Environment variables support
+# Can override with TF_VAR_* environment variables
+
+# Secrets scanning (delegated to gitleaks, but kept as backup)
+# secrets-scan-file-type:
+#   - .tf
+#   - .yaml
+#   - .yml
+#   - .json

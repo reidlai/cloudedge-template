@@ -14,7 +14,3 @@ resource "google_compute_firewall" "allow_https" {
   source_ranges = var.allowed_https_source_ranges
   target_tags   = ["https-server"]
 }
-
-output "firewall_rule_name" {
-  value = google_compute_firewall.allow_https.name
-}

@@ -1,0 +1,580 @@
+threagile_version: 1.0.0
+
+# ============================================================================
+# Vibetics Cloud Edge - GCP Infrastructure Threat Model
+# ============================================================================
+# Compliance Frameworks: OWASP Top 10, CIS Benchmarks, NIST 800-53, SOC 2
+# Last Updated: 2025-10-18
+# ============================================================================
+
+title: Vibetics Cloud Edge Infrastructure
+
+date: 2025-10-18
+
+author:
+  name: DevSecOps Team
+  homepage: github.com/your-org/vibetics-cloudedge
+
+management_summary_comment: >
+  This threat model covers the GCP cloud infrastructure including WAF, load balancing,
+  VPC networking, and serverless compute. All findings are mapped to compliance frameworks
+  (OWASP Top 10, CIS, NIST 800-53, SOC 2) for regulatory alignment.
+
+business_criticality: important # values: archive, operational, important, critical, mission-critical
+
+business_overview:
+  description: >
+    Multi-region cloud infrastructure providing secure API endpoints with edge security.
+    Key capabilities include DDoS protection (Cloud Armor), TLS encryption, VPC network isolation,
+    and serverless compute (Cloud Run). Designed for high availability and security-first architecture.
+
+technical_overview:
+  description: >
+    OpenTofu-managed GCP infrastructure with defense-in-depth security:
+    - **Edge Layer**: Global HTTPS Load Balancer + Cloud Armor WAF (OWASP Top 10 protection)
+    - **Network Layer**: Segregated ingress/egress VPCs with firewall rules (CIS Benchmark compliant)
+    - **Compute Layer**: Cloud Run serverless containers (internal-only ingress, IAM authentication)
+    - **Encryption**: TLS 1.3 in transit, Google-managed encryption at rest (NIST 800-53 SC-8, SC-13, SC-28)
+
+# ============================================================================
+# Compliance & Security Requirements
+# ============================================================================
+
+questions:
+  How is access to Cloud Run services authenticated?: >
+    IAM-based service account authentication with Workload Identity.
+    Cloud Run ingress is restricted to INTERNAL_LOAD_BALANCER only (no public access).
+    Compliance: NIST 800-53 AC-2, AC-3, IA-2 | SOC 2 CC6.1, CC6.2
+
+  How are secrets managed?: >
+    GCP Secret Manager for sensitive configuration.
+    No hardcoded secrets in code or environment variables.
+    Secrets scanned via pre-commit hooks (gitleaks).
+    Compliance: NIST 800-53 IA-5 | SOC 2 CC6.1
+
+  How is network traffic segmented?: >
+    Segregated ingress VPC (public-facing) and egress VPC (outbound traffic).
+    VPC peering with firewall rules restricting inter-VPC communication.
+    Compliance: NIST 800-53 SC-7, AC-4 | CIS GCP Foundation 3.x
+
+  How are DDoS attacks mitigated?: >
+    Cloud Armor WAF with rate limiting and adaptive protection.
+    Global load balancer distributes traffic across regions.
+    Compliance: NIST 800-53 SC-5 | OWASP Top 10 A09:2021 (Security Misconfiguration)
+
+  Why is Cloud Run accessible via Load Balancer without API Gateway?: >
+    ARCHITECTURE CLARIFICATION: This infrastructure provides EDGE NETWORKING only, not application-layer
+    API Gateway. Application teams deploy their own API Gateways (Cloud Endpoints, Apigee, Kong, custom
+    auth middleware) INSIDE Cloud Run containers as part of their application workloads.
+
+    Separation of Concerns:
+    - INFRASTRUCTURE LAYER (this project): Global HTTPS Load Balancer + Cloud Armor WAF
+      * Cloud Run uses INTERNAL_LOAD_BALANCER ingress (no public URLs exposed)
+      * Layer 7 DDoS protection, TLS 1.3 termination, OWASP Top 10 filtering
+      * Global content delivery, geo-blocking, domain-based routing
+    - APPLICATION LAYER (application teams): API Gateway + Authentication
+      * OAuth 2.0, JWT, API keys, rate limiting, request validation
+      * Schema enforcement, business logic, data access controls
+      * Deployed as part of Cloud Run container image
+
+    Current demo backend uses allUsers IAM for INFRASTRUCTURE TESTING ONLY.
+    Production applications MUST implement API Gateway authentication before deployment.
+    Compliance: NIST 800-53 AC-3 (Access Enforcement at application layer) | SOC 2 CC6.1
+
+  Does the API accept XML input (XXE risk mitigation)?: >
+    APIs are JSON-only by default. XML processing is NOT enabled in the demo backend.
+    If future applications require XML (SOAP, RSS, SVG uploads), they MUST:
+    - Disable XML external entity processing (XXE protection)
+    - Use secure XML parsers with entity expansion limits
+    - Validate Content-Type headers (reject unexpected XML)
+    - Apply WAF rules to block malicious XML payloads
+    Current risk: LOW (XML not in use). Future apps requiring XML must perform dedicated
+    threat modeling and implement XML-specific security controls.
+    Compliance: OWASP A03:2021 (Injection) | NIST 800-53 SI-10 (Input Validation)
+
+abuse_cases:
+  DDoS Attack on Load Balancer: >
+    As an attacker, I want to overwhelm the load balancer with traffic to cause service denial.
+    **Mitigation**: Cloud Armor rate limiting (1000 req/min per IP), adaptive protection enabled.
+    **Compliance**: NIST 800-53 SC-5, OWASP A09:2021
+
+  SQL Injection via API Endpoints: >
+    As an attacker, I want to inject malicious SQL through API parameters to access/modify database.
+    **Mitigation**: Cloud Armor OWASP ModSecurity Core Rule Set, input validation in application.
+    **Compliance**: OWASP A03:2021 (Injection), NIST 800-53 SI-10
+
+  Cross-Site Scripting (XSS): >
+    As an attacker, I want to inject scripts into API responses to hijack user sessions.
+    **Mitigation**: WAF XSS protection rules, Content-Security-Policy headers, output encoding.
+    **Compliance**: OWASP A03:2021 (Injection), CWE-79
+
+  Man-in-the-Middle (MITM) Attack: >
+    As an attacker, I want to intercept unencrypted traffic between client and server.
+    **Mitigation**: Enforce TLS 1.3, HSTS headers, certificate pinning for mobile apps.
+    **Compliance**: OWASP A02:2021 (Cryptographic Failures), NIST 800-53 SC-8, SC-13
+
+  Container Escape from Cloud Run: >
+    As an attacker, I want to escape the container runtime to access GCP infrastructure.
+    **Mitigation**: gVisor sandboxing (default in Cloud Run), least-privilege service accounts, no privileged containers.
+    **Compliance**: NIST 800-53 SC-39, CIS Docker Benchmark 5.1
+
+  Data Exfiltration via Egress VPC: >
+    As an attacker, I want to exfiltrate data through unauthorized outbound connections.
+    **Mitigation**: Egress VPC firewall rules (whitelist-only), VPC Flow Logs enabled, Cloud NAT monitoring.
+    **Compliance**: NIST 800-53 AC-4, SC-7 | SOC 2 CC6.6
+
+  Secrets Exposure in Code/Logs: >
+    As an attacker, I want to find hardcoded secrets in source code or application logs.
+    **Mitigation**: Gitleaks pre-commit scanning, Secret Manager for all secrets, log sanitization.
+    **Compliance**: OWASP A05:2021 (Security Misconfiguration), NIST 800-53 IA-5
+
+  Unauthorized Access to Cloud Run: >
+    As an attacker, I want to directly access Cloud Run URLs bypassing the load balancer/WAF.
+    **Mitigation**: Cloud Run ingress=INTERNAL_LOAD_BALANCER (blocks public access), IAM authentication required.
+    **Compliance**: NIST 800-53 AC-3, SC-7 | CIS GCP Foundation 7.2
+
+security_requirements:
+  OWASP Top 10 2021 Coverage: >
+    A01 Broken Access Control - IAM policies with least privilege, Cloud Run ingress restrictions.
+    A02 Cryptographic Failures - TLS 1.3 enforced, Google-managed encryption at rest.
+    A03 Injection - WAF OWASP ModSecurity rules, input validation.
+    A04 Insecure Design - Threat modeling (this document), security architecture reviews.
+    A05 Security Misconfiguration - IaC security scans (Checkov), pre-commit hooks.
+    A06 Vulnerable Components - SCA tools (pip-audit, govulncheck, Dependabot).
+    A07 Authentication Failures - IAM + MFA, Workload Identity, no long-lived keys.
+    A08 Software/Data Integrity - Signed container images, SLSA provenance, immutable infrastructure.
+    A09 Logging Failures - Cloud Logging enabled, audit logs retained 90+ days.
+    A10 SSRF - Egress VPC firewall rules, metadata server access restrictions.
+
+  CIS GCP Foundations Benchmark: >
+    3.x Networking - VPC Flow Logs enabled, Cloud NAT for egress, no default VPC usage.
+    4.x Virtual Machines - N/A (serverless Cloud Run only).
+    5.x Storage - Encryption at rest (Google-managed), no public buckets.
+    6.x Cloud SQL - N/A (no managed databases in scope).
+    7.x IAM - Service account keys rotation, no owner/editor roles, least privilege.
+
+  NIST 800-53 Rev 5 Controls: >
+    AC-2, AC-3 (Access Control) - IAM policies, RBAC.
+    AU-2, AU-3 (Audit Logging) - Cloud Logging, 90-day retention.
+    IA-2, IA-5 (Authentication) - MFA, Secret Manager.
+    SC-7, SC-8, SC-13 (Network Security) - VPC isolation, TLS 1.3, encryption.
+    SI-3, SI-4 (System Monitoring) - Cloud Monitoring, Security Command Center.
+
+  SOC 2 Type II Trust Principles: >
+    CC6.1 (Logical Access) - IAM authentication, least privilege.
+    CC6.2 (MFA) - GCP MFA enforced for human users.
+    CC6.6 (Encryption) - TLS 1.3, Google-managed encryption at rest.
+    CC7.2 (Monitoring) - Cloud Logging, Security Command Center alerts.
+
+tags_available:
+  - gcp
+  - cloud-run
+  - load-balancer
+  - waf
+  - cloud-armor
+  - vpc
+  - tls
+  - serverless
+  - opentofu
+  - terraform
+  - security
+  - edge
+  - public-facing
+  - owasp
+  - backend
+  - internal
+  - external
+  - untrusted
+  - internet
+  - gvisor
+
+# ============================================================================
+# Data Assets
+# ============================================================================
+
+data_assets:
+
+  API Request Data:
+    id: api-request-data
+    description: HTTP requests and responses from external clients
+    usage: business
+    origin: External Internet Users
+    owner: Backend Service Team
+    quantity: many # very-few, few, many, very-many
+    confidentiality: internal # public, internal, restricted, confidential, strictly-confidential
+    integrity: critical # archive, operational, important, critical, mission-critical
+    availability: critical
+    justification_cia_rating: >
+      API availability is critical for service operation (SLA 99.9%).
+      Data integrity is critical to prevent tampering/injection attacks.
+      Confidentiality is internal (may contain session tokens, user IDs).
+      **Compliance**: NIST 800-53 SC-8 (transmission confidentiality/integrity), SOC 2 CC6.6
+
+  Cloud Run Service Logs:
+    id: service-logs
+    description: Application logs from Cloud Run containers (may contain PII/errors)
+    usage: devops
+    origin: Cloud Run Backend
+    owner: DevSecOps Team
+    quantity: many
+    confidentiality: confidential # May contain PII, stack traces, debug info
+    integrity: important
+    availability: operational
+    justification_cia_rating: >
+      Logs critical for incident response and security monitoring.
+      Confidentiality high due to potential PII leakage in error messages.
+      **Compliance**: NIST 800-53 AU-2, AU-9 (audit logging), SOC 2 CC7.2
+
+  OpenTofu State Files:
+    id: terraform-state
+    description: Infrastructure state files (contain resource IDs, network topology)
+    usage: devops
+    origin: OpenTofu CLI / CI Pipeline
+    owner: DevSecOps Team
+    quantity: few
+    confidentiality: strictly-confidential # Exposes entire infrastructure layout
+    integrity: mission-critical # Tampering causes infrastructure drift/destruction
+    availability: important
+    justification_cia_rating: >
+      State integrity is mission-critical (prevents accidental resource deletion).
+      Confidentiality strictly-confidential (exposes IP ranges, resource IDs, secrets references).
+      **Compliance**: NIST 800-53 CM-3 (configuration change control), SOC 2 CC8.1
+
+  GCP Service Account Keys:
+    id: service-account-keys
+    description: IAM service account credentials (JSON keyfiles)
+    usage: devops
+    origin: GCP IAM
+    owner: DevSecOps Team
+    quantity: few
+    confidentiality: strictly-confidential
+    integrity: mission-critical
+    availability: critical
+    justification_cia_rating: >
+      Compromise allows full infrastructure access.
+      **Best Practice**: Use Workload Identity instead of long-lived keys.
+      **Compliance**: NIST 800-53 IA-5 (authenticator management), SOC 2 CC6.1
+
+# ============================================================================
+# Technical Assets
+# ============================================================================
+
+technical_assets:
+
+  External Clients:
+    id: external-clients
+    description: Web browsers, mobile apps, API clients accessing the service
+    type: external-entity # external-entity, process, datastore
+    usage: business
+    used_as_client_by_human: true
+    out_of_scope: true
+    justification_out_of_scope: >
+      External clients are untrusted and outside our security boundary.
+      We protect against malicious clients using WAF, rate limiting, and input validation.
+    size: application # system, service, application, component
+    technology: browser # one from the map at https://threagile.io/technology-types/
+    tags:
+      - external
+      - untrusted
+    internet: true
+    machine: virtual # physical, virtual, container, serverless
+    encryption: none # Client-side encryption not enforced (TLS handled by LB)
+    owner: External Users
+    confidentiality: public
+    integrity: operational
+    availability: operational
+    justification_cia_rating: >
+      External clients are out of scope. We assume minimal trust.
+    multi_tenant: false
+    redundant: false
+    custom_developed_parts: false
+    data_assets_processed:
+      - api-request-data
+    data_assets_stored:
+      - api-request-data
+    communication_links:
+      client-to-lb:
+        target: global-https-lb
+        description: HTTPS requests from internet to load balancer
+        protocol: https
+        authentication: none # Public API (authentication happens at application layer)
+        authorization: none
+        vpn: false
+        ip_filtered: false
+        readonly: false
+        usage: business
+        data_assets_sent:
+          - api-request-data
+        data_assets_received:
+          - api-request-data
+        diagram_tweak_weight: 1
+        diagram_tweak_constraint: false
+
+  Global HTTPS Load Balancer:
+    id: global-https-lb
+    description: GCP Global HTTPS Load Balancer with SSL termination and multi-region distribution
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    justification_out_of_scope:
+    size: component
+    technology: load-balancer
+    tags:
+      - gcp
+      - edge
+      - public-facing
+      - tls
+    internet: true
+    machine: virtual
+    encryption: data-with-symmetric-shared-key # TLS termination at LB
+    owner: Platform Team
+    confidentiality: internal
+    integrity: critical
+    availability: critical
+    justification_cia_rating: >
+      Load balancer is critical infrastructure component providing Layer 7 security.
+      **Compliance**: NIST 800-53 SC-8 (TLS encryption), CIS GCP 3.9
+      **XXE Protection**: Load balancer is protocol-agnostic (HTTP/HTTPS only). XXE risks
+      are mitigated at the application layer. APIs are JSON-only, no XML parsing enabled.
+      If XML is required, applications must implement secure XML parsers with entity expansion disabled.
+      **Access Control**: Cloud Run ingress restricted to INTERNAL_LOAD_BALANCER only,
+      preventing direct internet access. All traffic flows through WAF for inspection.
+    multi_tenant: false
+    redundant: true # Multi-region for DR
+    custom_developed_parts: false # Managed GCP service
+    data_assets_processed:
+      - api-request-data
+    data_assets_stored:
+      - service-logs # Access logs
+    data_formats_accepted:
+      - json
+      - xml
+    communication_links:
+      lb-to-waf:
+        target: cloud-armor-waf
+        description: Traffic inspection by Cloud Armor before routing to backend
+        protocol: https
+        authentication: none # WAF is inline, not authenticated
+        authorization: technical-user # WAF policy enforcement
+        tags:
+        vpn: false
+        ip_filtered: false
+        readonly: false
+        usage: business
+        data_assets_sent:
+          - api-request-data
+        data_assets_received:
+          - api-request-data
+
+      lb-to-cloud-run:
+        target: cloud-run-backend
+        description: Forwarding approved traffic to Cloud Run NEG
+        protocol: https
+        authentication: token # IAM token authentication for Cloud Run
+        authorization: technical-user
+        tags:
+          - internal
+        vpn: false
+        ip_filtered: true # Only from LB IP ranges
+        readonly: false
+        usage: business
+        data_assets_sent:
+          - api-request-data
+        data_assets_received:
+          - api-request-data
+
+  Cloud Armor WAF:
+    id: cloud-armor-waf
+    description: GCP Cloud Armor Web Application Firewall with OWASP ModSecurity Core Rule Set
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    size: component
+    technology: waf
+    tags:
+      - gcp
+      - security
+      - waf
+      - owasp
+    internet: false # Inline with load balancer
+    machine: virtual
+    encryption: none # Inspects decrypted traffic from LB
+    owner: Security Team
+    confidentiality: internal
+    integrity: critical
+    availability: critical
+    justification_cia_rating: >
+      WAF is critical security control protecting against OWASP Top 10.
+      **Compliance**: OWASP Top 10 A03, A05, A09 | NIST 800-53 SI-3, SI-4
+    multi_tenant: false
+    redundant: true
+    custom_developed_parts: false
+    data_assets_processed:
+      - api-request-data
+    data_assets_stored:
+      - service-logs # WAF logs
+
+  Cloud Run Backend:
+    id: cloud-run-backend
+    description: Cloud Run serverless containers running the API service (demo-api)
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    size: application
+    technology: container-platform
+    tags:
+      - gcp
+      - cloud-run
+      - backend
+      - serverless
+    internet: false # INTERNAL_LOAD_BALANCER ingress only
+    machine: serverless
+    encryption: data-with-symmetric-shared-key # TLS to Cloud Run
+    owner: Backend Team
+    confidentiality: internal
+    integrity: critical
+    availability: critical
+    justification_cia_rating: >
+      Backend service is core application logic with defense-in-depth security.
+      **Compliance**: NIST 800-53 AC-3, SC-39 (container isolation) | CIS Docker Benchmark
+      **Network Isolation**: INTERNAL_LOAD_BALANCER ingress prevents direct internet access.
+      No public Cloud Run URLs exposed. All traffic routed through Load Balancer + WAF.
+      **Application Security**: Demo uses allUsers IAM for infrastructure testing only.
+      Production apps MUST implement authentication (OAuth 2.0, JWT, API keys, or Cloud Endpoints/Apigee).
+      **Container Security**: gVisor sandboxing enabled, no privileged containers, least-privilege service accounts.
+      **Content Type**: JSON-only APIs (Content-Type: application/json). No XML parsing enabled.
+    multi_tenant: true # GCP Cloud Run is multi-tenant (gVisor sandboxing)
+    redundant: true # Auto-scaling across zones
+    custom_developed_parts: true # Custom application code
+    data_assets_processed:
+      - api-request-data
+    data_assets_stored:
+      - service-logs
+    data_formats_accepted:
+      - json
+
+# ============================================================================
+# Trust Boundaries
+# ============================================================================
+
+trust_boundaries:
+
+  Internet to GCP Edge:
+    id: internet-to-gcp
+    description: Public internet to GCP Global Load Balancer (untrusted → trusted)
+    type: network-cloud-provider
+    tags:
+      - internet
+      - untrusted
+    technical_assets_inside:
+      - global-https-lb
+      - cloud-armor-waf
+    technical_assets_outside:
+      - external-clients
+
+  GCP Internal Network:
+    id: gcp-internal
+    description: GCP internal network boundary (load balancer → VPC → Cloud Run)
+    type: network-cloud-provider
+    tags:
+      - gcp
+      - internal
+    technical_assets_inside:
+      - cloud-run-backend
+    technical_assets_outside:
+      - global-https-lb
+      - cloud-armor-waf
+
+# ============================================================================
+# Shared Runtimes
+# ============================================================================
+
+shared_runtimes:
+
+  GCP Cloud Run:
+    id: gcp-cloud-run
+    description: GCP Cloud Run serverless container platform (multi-tenant, gVisor sandboxed)
+    tags:
+      - gcp
+      - serverless
+      - gvisor
+    technical_assets_running:
+      - cloud-run-backend
+
+  GCP Global Load Balancing:
+    id: gcp-load-balancing
+    description: GCP Global HTTPS Load Balancing service
+    tags:
+      - gcp
+      - edge
+    technical_assets_running:
+      - global-https-lb
+
+# ============================================================================
+# Individual Risk Categories (Custom Risks Beyond Built-in Threagile Rules)
+# ============================================================================
+
+individual_risk_categories: {}
+  # Add custom risk categories here if needed beyond Threagile's 40+ built-in risk rules
+  # See https://threagile.io/risk-rules/ for built-in coverage
+
+# ============================================================================
+# Risk Tracking (Risk Acceptance and Mitigation Plans)
+# ============================================================================
+
+risk_tracking:
+
+  unguarded-access-from-internet@cloud-run-backend@global-https-lb@global-https-lb>lb-to-cloud-run:
+    status: false-positive
+    justification: >
+      This is FALSE POSITIVE. This infrastructure provides edge networking (Load Balancer + WAF),
+      not application-layer API Gateway. Application teams deploy their own API Gateways
+      (Cloud Endpoints, Apigee, Kong, or custom auth middleware) INSIDE Cloud Run containers.
+
+      Defense-in-Depth Layers:
+      1. Infrastructure Layer (THIS PROJECT): Global HTTPS LB + Cloud Armor WAF provides
+         Layer 7 DDoS protection, TLS 1.3 termination, OWASP Top 10 filtering, geo-blocking
+      2. Application Layer (APP TEAMS): API Gateway inside Cloud Run handles authentication
+         (OAuth 2.0, JWT, API keys), rate limiting, request validation, schema enforcement
+
+      Separation of Concerns:
+      - Edge infrastructure (this repo): Routes traffic securely to application workloads
+      - Application infrastructure (app teams): Implements business logic and API authentication
+
+      Current demo backend uses allUsers IAM for INFRASTRUCTURE TESTING ONLY. Production
+      applications MUST deploy with proper API Gateway authentication before accepting traffic.
+
+      Threagile correctly identifies no auth at infrastructure layer, but this is intentional -
+      authentication is responsibility of application workloads, not edge networking.
+    ticket: INFRA-001
+    date: 2025-10-18
+    checked_by: DevSecOps Team
+
+  xml-external-entity@global-https-lb:
+    status: false-positive
+    justification: >
+      This is FALSE POSITIVE. APIs are JSON-only by default. XML processing is NOT enabled
+      in the demo backend or standard API deployments.
+
+      Why This Risk Does Not Apply:
+      - Global HTTPS Load Balancer is protocol-agnostic (HTTP/HTTPS) and does NOT perform XML parsing
+      - Load balancer passes requests to backend applications without content inspection
+      - XXE attacks require XML parsing at the application layer
+      - All current and planned APIs use JSON (Content-Type: application/json)
+      - No XML libraries or parsers are included in demo backend dependencies
+
+      Defense-in-Depth If XML Is Needed:
+      If future applications require XML processing (SOAP, RSS, SVG uploads), they MUST:
+      - Disable XML external entity processing (libxml2: LIBXML_NOENT flag off)
+      - Use secure XML parsers with entity expansion limits
+      - Validate Content-Type headers and reject unexpected XML
+      - Apply Cloud Armor WAF rules to detect malicious XML patterns
+      - Perform dedicated threat modeling for XML-specific attack vectors
+
+      Current risk: NOT APPLICABLE (no XML processing at any layer).
+    ticket: INFRA-002
+    date: 2025-10-18
+    checked_by: DevSecOps Team

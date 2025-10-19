@@ -108,9 +108,3 @@ resource "google_cloud_run_service_iam_member" "invoker" {
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
-
-# ---Outputs---
-output "backend_service_id" {
-  description = "The ID of the backend service for the demo API."
-  value       = google_compute_backend_service.demo_backend.id
-}

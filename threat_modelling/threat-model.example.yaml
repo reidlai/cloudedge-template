@@ -1,0 +1,505 @@
+# ============================================================================
+# Threagile Threat Model - GCP Cloud Edge Infrastructure
+# ============================================================================
+# This is an EXAMPLE threat model for the vibetics-cloudedge project.
+# Copy this file to threat-model.yaml and customize for your architecture.
+#
+# Documentation: https://threagile.io/
+# Examples: https://github.com/threagile/threagile/tree/main/examples
+#
+# IMPORTANT: This file describes your system architecture for threat analysis.
+# Update this whenever you modify infrastructure (modules, networking, etc.)
+# ============================================================================
+
+threagile_version: 1.0.0
+
+# ============================================================================
+# Project Metadata
+# ============================================================================
+title: Vibetics Cloud Edge Infrastructure
+date: 2025-10-18
+author:
+  name: DevSecOps Team
+  homepage: https://github.com/your-org/vibetics-cloudedge
+
+# ============================================================================
+# Business Overview
+# ============================================================================
+business_overview:
+  description: |
+    Multi-region, cloud-agnostic edge infrastructure providing secure API endpoints
+    with WAF protection, CDN optimization, and disaster recovery capabilities.
+
+    Key Features:
+    - Global load balancing with DR failover
+    - Web Application Firewall (Cloud Armor)
+    - Content Delivery Network (CDN)
+    - Segregated ingress/egress VPCs
+    - Encrypted communication (TLS 1.3)
+
+  images:
+
+# ============================================================================
+# Technical Overview
+# ============================================================================
+technical_overview:
+  description: |
+    OpenTofu-managed GCP infrastructure with modular design:
+    - Ingress VPC: Public-facing traffic (load balancer, WAF)
+    - Egress VPC: Outbound traffic from Cloud Run services
+    - DR Load Balancer: Global HTTPS LB with SSL termination
+    - WAF: Cloud Armor security policies (OWASP Top 10, rate limiting)
+    - Demo Backend: Cloud Run containerized API service
+
+  images:
+
+# ============================================================================
+# Security Requirements
+# ============================================================================
+security_requirements:
+  # Authentication & Authorization
+  authentication:
+    - id: auth-01
+      description: Cloud Run services use IAM-based authentication
+      severity: critical
+      action: Enforce IAM service account permissions with least privilege
+
+  authorization:
+    - id: authz-01
+      description: Load balancer restricts traffic via Cloud Armor WAF rules
+      severity: critical
+      action: Block malicious traffic patterns (SQL injection, XSS, etc.)
+
+  # Network Security
+  networking:
+    - id: net-01
+      description: All external traffic must go through WAF/load balancer
+      severity: critical
+      action: Cloud Run ingress restricted to INTERNAL_LOAD_BALANCER
+
+    - id: net-02
+      description: VPC peering between ingress and egress VPCs
+      severity: high
+      action: Firewall rules restrict traffic between VPCs
+
+  # Encryption
+  encryption-in-transit:
+    - id: enc-01
+      description: TLS 1.3 enforced for all HTTPS connections
+      severity: critical
+      action: Self-signed certs for nonprod, managed certs for prod
+
+  encryption-at-rest:
+    - id: enc-02
+      description: Google-managed encryption keys for all storage
+      severity: high
+      action: Consider CMEK (customer-managed keys) for sensitive data
+
+# ============================================================================
+# Data Assets
+# ============================================================================
+data_assets:
+  # API Request Data
+  api-requests:
+    id: api-requests
+    description: HTTP requests from external clients to API endpoints
+    usage: business  # business, devops, or client-application
+    origin: External Users
+    owner: Backend Service
+    quantity: many  # very-few, few, many, very-many
+    confidentiality: internal  # public, internal, restricted, confidential, strictly-confidential
+    integrity: critical  # archive, operational, important, critical, mission-critical
+    availability: critical
+    justification_cia_rating: |
+      API availability is critical for service operation.
+      Data integrity is critical to prevent tampering.
+      Confidentiality is internal (some API data may be sensitive).
+
+  # Cloud Run Service Logs
+  service-logs:
+    id: service-logs
+    description: Application logs from Cloud Run services
+    usage: devops
+    origin: Cloud Run Backend
+    owner: DevSecOps Team
+    quantity: many
+    confidentiality: confidential  # May contain PII or sensitive errors
+    integrity: important
+    availability: operational
+    justification_cia_rating: |
+      Logs are important for debugging and security monitoring.
+      Confidentiality is high due to potential PII leakage.
+
+  # Infrastructure as Code (OpenTofu State)
+  terraform-state:
+    id: terraform-state
+    description: OpenTofu state files containing infrastructure configuration
+    usage: devops
+    origin: OpenTofu CLI
+    owner: DevSecOps Team
+    quantity: few
+    confidentiality: strictly-confidential  # Contains resource IDs, network configs
+    integrity: mission-critical  # Tampering breaks infrastructure
+    availability: important
+    justification_cia_rating: |
+      State file integrity is mission-critical (prevents infrastructure drift).
+      Confidentiality is strictly-confidential (exposes network topology).
+
+# ============================================================================
+# Technical Assets
+# ============================================================================
+technical_assets:
+  # ============================================================================
+  # External Clients
+  # ============================================================================
+  external-client:
+    id: external-client
+    description: External users accessing APIs via web browsers or apps
+    type: external-entity  # external-entity, process, datastore
+    usage: business
+    used_as_client_by_human: true
+    out_of_scope: true  # We don't control client security
+    justification_out_of_scope: |
+      External clients are outside our security boundary.
+      We protect against malicious clients using WAF and rate limiting.
+    size: application  # system, service, application, component
+    technology: browser
+    tags:
+      - external
+      - untrusted
+    internet: true
+    machine: virtual  # physical, virtual, container, serverless
+    encryption: none  # Client-side encryption not enforced
+    data_assets_processed:
+      - api-requests
+    data_assets_stored:
+      - api-requests
+    communication_links:
+      external-to-lb:
+        target: global-load-balancer
+        description: HTTPS requests from internet to load balancer
+        protocol: https
+        authentication: none  # Public API
+        authorization: none
+        vpn: false
+        ip_filtered: false
+        readonly: false
+        usage: business
+        data_assets_sent:
+          - api-requests
+        data_assets_received:
+          - api-requests
+
+  # ============================================================================
+  # Global HTTPS Load Balancer (DR Load Balancer)
+  # ============================================================================
+  global-load-balancer:
+    id: global-load-balancer
+    description: GCP Global HTTPS Load Balancer with SSL termination
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    size: component
+    technology: load-balancer
+    tags:
+      - gcp
+      - edge
+      - public-facing
+    internet: true
+    machine: virtual
+    encryption: tls  # TLS termination at LB
+    multi_tenant: false
+    redundant: true  # Multi-region for DR
+    custom_developed_parts: false  # Managed GCP service
+    data_assets_processed:
+      - api-requests
+    data_assets_stored:
+      - service-logs  # Access logs
+    communication_links:
+      lb-to-waf:
+        target: cloud-armor-waf
+        description: Traffic inspection by Cloud Armor before routing
+        protocol: https
+        authentication: none
+        authorization: waf-rules
+        vpn: false
+        ip_filtered: false
+        readonly: false
+        usage: business
+        data_assets_sent:
+          - api-requests
+        data_assets_received:
+          - api-requests
+
+      lb-to-backend:
+        target: cloud-run-backend
+        description: Forwarding approved traffic to Cloud Run NEG
+        protocol: https
+        authentication: iam
+        authorization: iam
+        vpn: false
+        ip_filtered: true  # Only from LB IP ranges
+        readonly: false
+        usage: business
+        data_assets_sent:
+          - api-requests
+        data_assets_received:
+          - api-requests
+
+  # ============================================================================
+  # Cloud Armor WAF
+  # ============================================================================
+  cloud-armor-waf:
+    id: cloud-armor-waf
+    description: GCP Cloud Armor Web Application Firewall
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    size: component
+    technology: waf
+    tags:
+      - gcp
+      - security
+      - waf
+    internet: false
+    machine: virtual
+    encryption: none  # Inspects decrypted traffic from LB
+    multi_tenant: false
+    redundant: true
+    custom_developed_parts: false
+    data_assets_processed:
+      - api-requests
+    data_assets_stored:
+      - service-logs  # WAF logs
+
+  # ============================================================================
+  # Cloud Run Backend Service
+  # ============================================================================
+  cloud-run-backend:
+    id: cloud-run-backend
+    description: Cloud Run containerized API service (demo-api)
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    size: application
+    technology: container-platform
+    tags:
+      - gcp
+      - cloud-run
+      - backend
+    internet: false  # INTERNAL_LOAD_BALANCER ingress
+    machine: serverless
+    encryption: tls
+    multi_tenant: true  # GCP Cloud Run is multi-tenant
+    redundant: true  # Auto-scaling
+    custom_developed_parts: true  # Our application code
+    data_assets_processed:
+      - api-requests
+    data_assets_stored:
+      - service-logs
+    communication_links:
+      backend-to-egress:
+        target: egress-vpc
+        description: Outbound connections from Cloud Run
+        protocol: https
+        authentication: iam
+        authorization: iam
+        vpn: false
+        ip_filtered: false
+        readonly: false
+        usage: devops
+        data_assets_sent:
+          - api-requests
+        data_assets_received:
+          - api-requests
+
+  # ============================================================================
+  # Ingress VPC
+  # ============================================================================
+  ingress-vpc:
+    id: ingress-vpc
+    description: VPC network for inbound traffic (load balancer, WAF)
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    size: component
+    technology: network
+    tags:
+      - gcp
+      - vpc
+      - ingress
+    internet: true
+    machine: virtual
+    encryption: none  # Network layer
+    multi_tenant: false
+    redundant: true
+    custom_developed_parts: false
+
+  # ============================================================================
+  # Egress VPC
+  # ============================================================================
+  egress-vpc:
+    id: egress-vpc
+    description: VPC network for outbound traffic from Cloud Run
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    size: component
+    technology: network
+    tags:
+      - gcp
+      - vpc
+      - egress
+    internet: true  # May connect to external APIs
+    machine: virtual
+    encryption: none
+    multi_tenant: false
+    redundant: true
+    custom_developed_parts: false
+
+  # ============================================================================
+  # CDN Backend (Storage Bucket)
+  # ============================================================================
+  cdn-backend:
+    id: cdn-backend
+    description: GCS bucket for CDN static content
+    type: datastore
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    size: component
+    technology: object-storage
+    tags:
+      - gcp
+      - storage
+      - cdn
+    internet: false  # Accessed via LB only
+    machine: virtual
+    encryption: data-at-rest-encrypted  # Google-managed encryption
+    multi_tenant: true
+    redundant: true
+    custom_developed_parts: false
+    data_assets_processed:
+      - api-requests  # Static content delivery
+    data_assets_stored:
+      - api-requests
+
+# ============================================================================
+# Trust Boundaries
+# ============================================================================
+trust_boundaries:
+  internet-boundary:
+    id: internet-boundary
+    description: Public internet to GCP edge (load balancer)
+    type: network-cloud-provider  # network-on-prem, network-dedicated-hoster, network-virtual-lan, network-cloud-provider, etc.
+    tags:
+      - internet
+      - untrusted
+    technical_assets_inside:
+      - global-load-balancer
+      - cloud-armor-waf
+      - ingress-vpc
+      - egress-vpc
+      - cloud-run-backend
+      - cdn-backend
+    technical_assets_outside:
+      - external-client
+
+  gcp-internal:
+    id: gcp-internal
+    description: GCP internal network boundary (VPC peering)
+    type: network-cloud-provider
+    tags:
+      - gcp
+      - internal
+    technical_assets_inside:
+      - cloud-run-backend
+      - cdn-backend
+    technical_assets_outside:
+      - global-load-balancer
+      - cloud-armor-waf
+
+# ============================================================================
+# Shared Runtimes (GCP Services)
+# ============================================================================
+shared_runtimes:
+  gcp-cloud-run:
+    id: gcp-cloud-run
+    description: GCP Cloud Run serverless container platform
+    tags:
+      - gcp
+      - serverless
+    technical_assets_running:
+      - cloud-run-backend
+
+  gcp-load-balancing:
+    id: gcp-load-balancing
+    description: GCP Global Load Balancing service
+    tags:
+      - gcp
+      - edge
+    technical_assets_running:
+      - global-load-balancer
+
+# ============================================================================
+# Individual Risk Categories
+# ============================================================================
+individual_risk_categories:
+  # You can add custom risk categories here if needed
+  # Example:
+  # supply-chain-attack:
+  #   id: supply-chain-attack
+  #   description: Risk of compromised dependencies in Cloud Run containers
+  #   impact: Malicious code execution in backend service
+  #   asvs: V14.2
+  #   cheat_sheet: https://cheatsheetseries.owasp.org/cheatsheets/Supply_Chain_Security_Cheat_Sheet.html
+  #   action: Implement container scanning (Trivy) in CI/CD
+  #   detection_logic: Monitor for unexpected outbound connections from Cloud Run
+  #   risk_assessment: medium  # low, medium, elevated, high, critical
+  #   false_positives: Legitimate external API calls
+  #   model_failure_possible_reason: false
+  #   cwe: 494
+  #   risks_identified:
+  #     container-dependency-risk@cloud-run-backend:
+  #       severity: high  # low, medium, high, critical
+  #       exploitation_likelihood: likely  # unlikely, likely, very-likely, frequent
+  #       exploitation_impact: medium  # low, medium, high, very-high
+  #       data_breach_probability: possible  # improbable, possible, probable
+  #       data_breach_technical_assets:
+  #         - cloud-run-backend
+  #       most_relevant_data_asset: api-requests
+  #       most_relevant_technical_asset: cloud-run-backend
+  #       most_relevant_communication_link: lb-to-backend
+  #       most_relevant_trust_boundary: gcp-internal
+  #       most_relevant_shared_runtime: gcp-cloud-run
+
+# ============================================================================
+# Risk Tracking & Questions
+# ============================================================================
+questions:
+  # Uncomment and answer these to improve threat model accuracy
+  # - How are Cloud Run container images scanned for vulnerabilities?
+  # - What secrets management solution is used (GCP Secret Manager)?
+  # - Are VPC Service Controls enabled for data exfiltration prevention?
+  # - Is Cloud Armor configured with OWASP ModSecurity Core Rule Set?
+  # - What monitoring/alerting exists for suspicious traffic patterns?
+
+abuse_cases:
+  # Document known abuse scenarios
+  # - DDoS attack on load balancer (mitigated by Cloud Armor rate limiting)
+  # - SQL injection via API endpoints (mitigated by WAF rules)
+  # - Data exfiltration from Cloud Run (mitigated by egress VPC controls)
+
+security_controls:
+  # List implemented security controls
+  # - WAF (Cloud Armor with OWASP Top 10 rules)
+  # - TLS 1.3 encryption in transit
+  # - IAM-based authentication for Cloud Run
+  # - VPC ingress controls (INTERNAL_LOAD_BALANCER)
+  # - Pre-commit security scans (gitleaks, checkov, gosec)
+  # - Container image scanning (Trivy in CI)

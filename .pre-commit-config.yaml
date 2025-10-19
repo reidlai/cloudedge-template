@@ -1,0 +1,564 @@
+# Pre-commit hooks configuration
+# Mirrors CI pipeline gates defined in README.md and constitution.md (§7)
+#
+# Installation:
+#   poetry install
+#   poetry run pre-commit install
+#
+# Manual run:
+#   poetry run pre-commit run --all-files
+#
+# Update hooks:
+#   poetry run pre-commit autoupdate
+
+repos:
+  # ============================================================================
+  # SECURITY CHECKS - Run First (Fail Fast on Security Issues)
+  # ============================================================================
+  # Order: Secrets → SCA (Dependencies) → SAST (Code Security) → IaC Compliance
+
+  # ============================================================================
+  # 1. CI Gate: ci-secrets (gitleaks)
+  # ============================================================================
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
+        name: gitleaks - Scan for secrets
+        description: Detects hardcoded secrets, passwords, API keys
+        args: ['--verbose', '--no-banner']
+        # Stops commit if secrets found (CRITICAL security gate)
+
+  # ============================================================================
+  # 2a. CI Gate: ci-sca-terraform (Terraform Provider Vulnerabilities)
+  # ============================================================================
+  - repo: local
+    hooks:
+      - id: terraform-provider-check
+        name: Terraform SCA (Provider Version Check)
+        description: Check for outdated Terraform providers
+        entry: bash -c 'echo "=== Terraform Provider Version Check ==="; if [ -f .terraform.lock.hcl ]; then echo "Found .terraform.lock.hcl"; grep -A 1 "provider " .terraform.lock.hcl | head -10; echo "TIP - Use Dependabot or Renovate for auto-updates"; else echo "No .terraform.lock.hcl found"; fi'
+        language: system
+        pass_filenames: false
+        files: ^\.terraform\.lock\.hcl$
+        always_run: false
+
+  # ============================================================================
+  # 2b. CI Gate: ci-sca-python (Python Dependency Vulnerabilities)
+  # ============================================================================
+  - repo: local
+    hooks:
+      - id: pip-audit
+        name: Python SCA (pip-audit)
+        description: Scan Python dependencies for known vulnerabilities
+        entry: bash -c 'if command -v pip-audit &> /dev/null; then pip-audit --desc --format=text; else echo "INFO pip-audit not installed. Install with poetry add --group dev pip-audit"; exit 0; fi'
+        language: system
+        pass_filenames: false
+        files: ^(pyproject\.toml|poetry\.lock|requirements.*\.txt)$
+
+  # ============================================================================
+  # 2c. CI Gate: ci-sca-go (Go Dependency Vulnerabilities)
+  # ============================================================================
+  - repo: local
+    hooks:
+      - id: govulncheck
+        name: Go SCA (govulncheck)
+        description: Scan Go dependencies for known vulnerabilities
+        entry: bash -c 'if command -v govulncheck &> /dev/null; then govulncheck ./...; else echo "INFO govulncheck not installed. Install with go install golang.org/x/vuln/cmd/govulncheck@latest"; exit 0; fi'
+        language: system
+        pass_filenames: false
+        files: go\.(mod|sum)$
+        always_run: false
+
+  # ============================================================================
+  # 3a. CI Gate: ci-sast-iac (Checkov - Terraform/IaC Security)
+  # ============================================================================
+  - repo: local
+    hooks:
+      - id: checkov
+        name: Checkov - IaC Compliance
+        description: Scans Terraform for CIS/NIST/SOC2 compliance
+        entry: bash -c 'if command -v checkov &> /dev/null; then checkov -d . --quiet --compact --framework terraform; else echo "WARNING checkov not installed. Install with poetry add --group dev checkov"; exit 0; fi'
+        language: system
+        pass_filenames: false
+        always_run: true
+        files: \.tf$
+
+  # ============================================================================
+  # 3b. CI Gate: ci-sast-go (Go Code Security)
+  # ============================================================================
+  - repo: local
+    hooks:
+      - id: gosec
+        name: Go SAST (gosec)
+        description: Security scanner for Go code (detects hardcoded secrets, SQL injection, etc.)
+        entry: bash -c 'if command -v gosec &> /dev/null; then gosec -fmt=text -exclude-dir=.terraform ./...; else echo "INFO gosec not installed. Install with - go install github.com/securego/gosec/v2/cmd/gosec@latest"; exit 0; fi'
+        language: system
+        pass_filenames: false
+        files: \.go$
+        exclude: vendor/
+
+  # ============================================================================
+  # CODE QUALITY - Formatting & Linting (Run After Security Checks)
+  # ============================================================================
+
+  # ============================================================================
+  # 4. General File Quality Checks
+  # ============================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Prevent committing large files (>500KB)
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+        exclude: '^(tests/fixtures/|docs/images/|threat_modelling/.*\.so$)'
+
+      # Ensure files end with newline
+      - id: end-of-file-fixer
+        exclude: '^(\.env\.example|.*\.tfvars\.example)$'
+
+      # Trim trailing whitespace
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+      # Check YAML syntax
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: '^(\.github/workflows/)'  # GitHub Actions has custom syntax
+
+      # Check JSON syntax
+      - id: check-json
+        exclude: '^(\.vscode/|threat_modelling/reports/)'
+
+      # Check TOML syntax
+      - id: check-toml
+
+      # Prevent merge conflict markers
+      - id: check-merge-conflict
+
+      # Check for files that would conflict on case-insensitive filesystems
+      - id: check-case-conflict
+
+      # Ensure shell scripts are executable
+      - id: check-executables-have-shebangs
+
+      # Ensure shell scripts have proper shebangs
+      - id: check-shebang-scripts-are-executable
+
+      # Detect private keys
+      - id: detect-private-key
+        exclude: '^\.gitleaks\.(toml|baseline)$'
+
+  # ============================================================================
+  # 5. OpenTofu Format & Validation
+  # ============================================================================
+  # NOTE: Using local hooks to support OpenTofu instead of Terraform
+  - repo: local
+    hooks:
+      # Format OpenTofu files
+      - id: opentofu_fmt
+        name: OpenTofu Format
+        description: Rewrites OpenTofu files to canonical format
+        entry: tofu fmt -recursive
+        language: system
+        files: \.tf$
+        pass_filenames: false
+
+      # Validate OpenTofu syntax
+      - id: opentofu_validate
+        name: OpenTofu Validate
+        description: Validates OpenTofu configuration files
+        entry: bash -c
+        args:
+          - -c
+          - |
+            for dir in $(find . -name "*.tf" -not -path "*/.terraform/*" -exec dirname {} \; | sort -u); do
+              echo "Validating $dir..."
+              (cd "$dir" && tofu init -backend=false &>/dev/null && tofu validate) || exit 1
+            done
+        language: system
+        pass_filenames: false
+        files: \.tf$
+
+      # Lint OpenTofu with tflint
+      - id: opentofu_tflint
+        name: TFLint
+        description: Lints OpenTofu files for best practices
+        entry: bash -c
+        args:
+          - -c
+          - |
+            # Get repo root for absolute config path
+            REPO_ROOT=$(git rev-parse --show-toplevel)
+            tflint --config="${REPO_ROOT}/.tflint.hcl" --call-module-type=all --recursive
+        language: system
+        pass_filenames: false
+        files: \.tf$
+
+  # ============================================================================
+  # 6. Python Code Quality (for test scripts)
+  # ============================================================================
+  - repo: https://github.com/psf/black
+    rev: 24.2.0
+    hooks:
+      - id: black
+        name: Black - Python formatter
+        description: Formats Python code to consistent style
+        language_version: python3.12
+        args: [--line-length=100]
+        files: ^tests/.*\.py$
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: isort - Python import sorter
+        description: Sorts Python imports
+        args: [--profile=black, --line-length=100]
+        files: ^tests/.*\.py$
+
+  # Optional: Uncomment to enable Python linting
+  # - repo: https://github.com/astral-sh/ruff-pre-commit
+  #   rev: v0.2.2
+  #   hooks:
+  #     - id: ruff
+  #       name: Ruff - Python linter
+  #       args: [--fix, --exit-non-zero-on-fix]
+  #       files: ^tests/.*\.py$
+
+  # ============================================================================
+  # 7. Go Code Quality (for Terratest integration tests)
+  # ============================================================================
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+        name: Go Format
+        description: Formats Go code
+        files: ^tests/.*\.go$
+
+      - id: go-mod-tidy
+        name: Go Mod Tidy
+        description: Ensures go.mod and go.sum are tidy
+        files: ^tests/.*\.go$
+
+  # Optional: Uncomment to enable Go linting
+  # - repo: https://github.com/golangci/golangci-lint
+  #   rev: v1.56.2
+  #   hooks:
+  #     - id: golangci-lint
+  #       name: golangci-lint
+  #       args: [--timeout=5m]
+  #       files: ^tests/.*\.go$
+
+  # ============================================================================
+  # 8. Markdown Linting (for documentation)
+  # ============================================================================
+  # NOTE: markdownlint-cli2 is a Node.js alternative that doesn't require Ruby
+  # IMPORTANT: Exclude SpecKit-managed files and AI agent instructions
+  # - .specify/, specs/, .claude/, .gemini/ - SpecKit workflow directories
+  # - CLAUDE.md, GEMINI.md - AI agent instruction files (optimized for AI, not humans)
+  # - CHANGELOG.md - Auto-generated changelog
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.18.1
+    hooks:
+      - id: markdownlint-cli2
+        name: Markdownlint
+        description: Lints markdown files (excludes AI-managed files)
+        args: [--config=.markdownlint-cli2.yaml]
+        exclude: '^(\.specify/|specs/|\.claude/|\.gemini/|CLAUDE\.md|GEMINI\.md|CHANGELOG\.md)'
+
+  # ============================================================================
+  # 9. YAML Linting
+  # ============================================================================
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        name: yamllint
+        description: Lints YAML files
+        args: [-c=.yamllint.yaml]
+        exclude: '^(\.github/workflows/)'  # GitHub Actions has custom requirements
+
+  # ============================================================================
+  # 10. Git Commit Message Linting (Conventional Commits)
+  # ============================================================================
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.1.0
+    hooks:
+      - id: conventional-pre-commit
+        name: Conventional Commit
+        description: Enforces conventional commit message format
+        stages: [commit-msg]
+        # Format: type(scope): subject
+        # Examples:
+        #   feat: add WAF module
+        #   fix(firewall): correct source IP restriction
+        #   docs: update README deployment steps
+        #   test: add integration test for load balancer
+
+  # ============================================================================
+  # 11. Security: Detect AWS/GCP credentials
+  # ============================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: detect-aws-credentials
+        args: [--allow-missing-credentials]
+
+  # ============================================================================
+  # 12. Custom Local Hooks
+  # ============================================================================
+  - repo: local
+    hooks:
+      # Ensure .env file is never committed
+      - id: check-env-file
+        name: Block .env file
+        description: Prevents committing .env files with secrets
+        entry: bash -c
+        args:
+          - -c
+          - |
+            if git diff --cached --name-only | grep -q "^\.env$"; then
+              echo "ERROR: .env file should not be committed. Use .env.example instead."
+              exit 1
+            fi
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Ensure constitution changes are labeled
+      - id: check-constitution-changes
+        name: Constitution Change Label Check
+        description: Warns if constitution.md is modified (requires constitution-change label)
+        entry: bash -c
+        args:
+          - -c
+          - |
+            if git diff --cached --name-only | grep -q "constitution\.md"; then
+              echo "WARNING: constitution.md modified. Ensure PR has constitution-change label and required approvals."
+            fi
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
+        stages: [pre-commit]
+
+      # Validate mandatory files exist
+      - id: check-mandatory-files
+        name: Check Mandatory Files
+        description: Ensures required files exist (constitution §9)
+        entry: bash -c
+        args:
+          - -c
+          - |
+            for file in README.md LICENSE.md CHANGELOG.md .github/workflows/ci.yml; do
+              if [ ! -f "$file" ]; then
+                echo "ERROR: Required file missing - $file"
+                exit 1
+              fi
+            done
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Validate Threagile threat model with optional report generation
+      # - id: check-threat-modeling
+      #   name: Threagile Threat Model Validation
+      #   description: Validates threat model YAML, checks untracked critical risks (set THREAGILE_FULL_REPORT=1 for full analysis)
+      #   entry: bash -c
+      #   args:
+      #     - -c
+      #     - |
+      #       # Configuration
+      #       THREAT_MODEL="threat_modelling/threat-model.yaml"
+      #       REPORTS_DIR="threat_modelling/reports"
+      #       FULL_REPORT="${THREAGILE_FULL_REPORT:-0}"  # Set THREAGILE_FULL_REPORT=1 to generate full reports
+
+      #       # Colors
+      #       RED='\033[0;31m'
+      #       GREEN='\033[0;32m'
+      #       YELLOW='\033[1;33m'
+      #       BLUE='\033[0;34m'
+      #       NC='\033[0m'
+
+      #       # Ensure threat_modelling directory structure exists
+      #       if [ ! -d "threat_modelling" ]; then
+      #         mkdir -p threat_modelling/reports threat_modelling/manual
+      #         echo -e "${GREEN}✓${NC} Created threat_modelling/ directory structure"
+      #       fi
+
+      #       # Check if Threagile threat model exists
+      #       if [ ! -f "$THREAT_MODEL" ]; then
+      #         echo ""
+      #         echo -e "${YELLOW}⚠ WARNING${NC} No Threagile threat model found at $THREAT_MODEL"
+      #         echo ""
+      #         echo "  Threat Modeling Workflow (Threagile)"
+      #         echo "  ════════════════════════════════════════════════════════════"
+      #         echo "  1. Create $THREAT_MODEL (describe system architecture)"
+      #         echo "  2. Pre-commit validates YAML + checks untracked risks (fast)"
+      #         echo "  3. CI runs Threagile to auto-generate full reports"
+      #         echo ""
+      #         echo "  Quick Start:"
+      #         echo "    cp threat_modelling/threat-model.example.yaml $THREAT_MODEL"
+      #         echo "    # Edit threat-model.yaml to describe your architecture"
+      #         echo ""
+      #         echo "  Documentation: README.md (search 'Working with Threat Findings')"
+      #         echo ""
+      #         exit 0
+      #       fi
+
+      #       # Step 1: Validate YAML syntax
+      #       if command -v yamllint &> /dev/null || command -v poetry &> /dev/null; then
+      #         YAMLLINT_CMD="yamllint"
+      #         if ! command -v yamllint &> /dev/null && command -v poetry &> /dev/null; then
+      #           YAMLLINT_CMD="poetry run yamllint"
+      #         fi
+      #         if $YAMLLINT_CMD -d relaxed "$THREAT_MODEL" 2>&1 | grep -qv "warning"; then
+      #           echo -e "${GREEN}✓${NC} Threat model YAML syntax valid"
+      #         else
+      #           echo -e "${RED}✗ ERROR${NC} Threat model has YAML syntax errors"
+      #           $YAMLLINT_CMD -d relaxed "$THREAT_MODEL"
+      #           exit 1
+      #         fi
+      #       else
+      #         echo -e "${BLUE}ℹ${NC} yamllint not installed, skipping YAML validation"
+      #       fi
+
+      #       # Step 2: Check if Threagile is installed
+      #       if ! command -v threagile &> /dev/null; then
+      #         echo -e "${BLUE}ℹ${NC} Threagile not installed locally - skipping report generation"
+      #         echo "  Install: go install github.com/threagile/threagile@latest"
+      #         echo "  Or set THREAGILE_FULL_REPORT=0 to skip (CI will generate reports)"
+      #         exit 0
+      #       fi
+
+      #       # Step 3: Check if raa.so plugin exists
+      #       if [ ! -f "threat_modelling/raa.so" ]; then
+      #         echo -e "${YELLOW}⚠ WARNING${NC} raa.so plugin not found - cannot generate reports locally"
+      #         echo "  Build plugin: see README.md 'Running Threat Modeling Locally'"
+      #         exit 0
+      #       fi
+
+      #       # Step 4: Determine if we should generate reports
+      #       SHOULD_GENERATE_REPORT=false
+
+      #       if [ "$FULL_REPORT" = "1" ]; then
+      #         # User explicitly requested full report
+      #         SHOULD_GENERATE_REPORT=true
+      #         echo -e "${BLUE}ℹ${NC} THREAGILE_FULL_REPORT=1 - Generating full threat analysis..."
+      #       elif git diff --cached --name-only | grep -qF "$THREAT_MODEL"; then
+      #         # threat-model.yaml is being committed - generate report
+      #         SHOULD_GENERATE_REPORT=true
+      #         echo -e "${BLUE}ℹ${NC} Threat model modified - Generating updated analysis..."
+      #       elif [ -f "${REPORTS_DIR}/risks.json" ]; then
+      #         # Reports already exist - just validate them
+      #         SHOULD_GENERATE_REPORT=false
+      #         echo -e "${BLUE}ℹ${NC} Using existing threat reports (threat-model.yaml unchanged)"
+      #       else
+      #         # No reports exist - generate them
+      #         SHOULD_GENERATE_REPORT=true
+      #         echo -e "${BLUE}ℹ${NC} No existing reports found - Generating initial analysis..."
+      #       fi
+
+      #       # Step 5: Generate reports if needed
+      #       if [ "$SHOULD_GENERATE_REPORT" = "true" ]; then
+      #         cd threat_modelling
+      #         if threagile -model threat-model.yaml -output reports \
+      #             -generate-data-flow-diagram=false \
+      #             -generate-data-asset-diagram=false \
+      #             -generate-report-pdf=false \
+      #             -generate-risks-excel=false \
+      #             -generate-tags-excel=false 2>&1 | grep -v "INFO\|WARNING"; then
+      #           echo -e "${GREEN}✓${NC} Threat model reports generated successfully"
+      #         else
+      #           echo -e "${RED}✗ ERROR${NC} Failed to generate threat model reports"
+      #           cd ..
+      #           exit 1
+      #         fi
+      #         cd ..
+      #       fi
+
+      #       # Step 6: Check for untracked CRITICAL/ELEVATED risks
+      #       if [ -f "${REPORTS_DIR}/risks.json" ] && command -v jq &> /dev/null; then
+      #         # Count untracked critical/elevated risks
+      #         UNTRACKED=$(jq '[.[] | select(.risk_status == "unchecked" and (.severity == "critical" or .severity == "elevated"))] | length' "${REPORTS_DIR}/risks.json" 2>/dev/null || echo "0")
+
+      #         if [ "$UNTRACKED" -gt 0 ]; then
+      #           echo ""
+      #           echo -e "${RED}✗ FAIL${NC} $UNTRACKED critical/elevated risk(s) require triage in threat-model.yaml"
+      #           echo ""
+      #           echo "  Untracked Risks:"
+      #           jq -r '.[] | select(.risk_status == "unchecked" and (.severity == "critical" or .severity == "elevated")) | "  - [\(.severity | ascii_upcase)] \(.title | gsub("</?b>"; ""))"' "${REPORTS_DIR}/risks.json" 2>/dev/null || true
+      #           echo ""
+      #           echo "  Action Required:"
+      #           echo "  1. Review risks: jq '.[] | select(.risk_status == \"unchecked\")' ${REPORTS_DIR}/risks.json"
+      #           echo "  2. Add risk_tracking entries to $THREAT_MODEL (see README.md)"
+      #           echo "  3. Regenerate: cd threat_modelling && threagile -model threat-model.yaml -output reports ..."
+      #           echo ""
+      #           echo "  Documentation: README.md (search 'Working with Threat Findings')"
+      #           echo "  Quick Reference: threat_modelling/RISK_TRACKING_GUIDE.md"
+      #           echo ""
+      #           exit 1
+      #         else
+      #           # Show risk summary
+      #           TOTAL=$(jq '. | length' "${REPORTS_DIR}/risks.json" 2>/dev/null || echo "0")
+      #           TRACKED=$(jq '[.[] | select(.risk_status != "unchecked")] | length' "${REPORTS_DIR}/risks.json" 2>/dev/null || echo "0")
+      #           echo -e "${GREEN}✓${NC} All critical/elevated risks tracked ($TRACKED/$TOTAL risks addressed)"
+      #         fi
+      #       elif [ ! -f "${REPORTS_DIR}/risks.json" ]; then
+      #         echo -e "${YELLOW}⚠ WARNING${NC} No threat reports found - install Threagile for local validation"
+      #         echo "  CI will generate reports and validate risks"
+      #       fi
+
+      #       # Step 7: Warn if infrastructure changed but threat model not updated
+      #       if git diff --cached --name-only | grep -qE '\.(tf|go)$'; then
+      #         if ! git diff --cached --name-only | grep -qF "$THREAT_MODEL"; then
+      #           echo ""
+      #           echo -e "${YELLOW}⚠ WARNING${NC} Infrastructure modified but threat model not updated"
+      #           echo "  → Infrastructure files (.tf/.go) changed"
+      #           echo "  → Threat model $THREAT_MODEL not staged"
+      #           echo ""
+      #           echo "  Action: Review if architectural changes require threat model updates"
+      #           echo ""
+      #         fi
+      #       fi
+
+      #       # Step 8: Feature-specific manual threat modeling reminder
+      #       if git diff --cached --name-only | grep -qE '^modules/.*\.tf$'; then
+      #         BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+      #         if [ "$BRANCH" != "main" ] && [ "$BRANCH" != "master" ]; then
+      #           THREAT_DIR="threat_modelling/manual/${BRANCH}"
+      #           if [ ! -d "$THREAT_DIR" ]; then
+      #             echo ""
+      #             echo -e "${BLUE}💡 TIP${NC} New module detected - consider manual STRIDE analysis"
+      #             echo "  → Create ${THREAT_DIR}/ for feature-specific threat docs"
+      #             echo ""
+      #           fi
+      #         fi
+      #       fi
+      #   language: system
+      #   pass_filenames: false
+      #   always_run: true
+      #   verbose: true
+
+# ============================================================================
+# Pre-commit Configuration
+# ============================================================================
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [pre-commit]
+
+# Fail fast on first error
+fail_fast: false
+
+# Minimum pre-commit version required
+minimum_pre_commit_version: '3.5.0'
+
+# CI configuration
+ci:
+  autofix_commit_msg: 'chore: auto-fix pre-commit hooks'
+  autofix_prs: true
+  autoupdate_commit_msg: 'chore: update pre-commit hooks'
+  autoupdate_schedule: monthly
+  skip: [opentofu_validate, opentofu_tflint, semgrep]  # Skip slow hooks in CI (run in GitHub Actions instead)
+  submodules: false

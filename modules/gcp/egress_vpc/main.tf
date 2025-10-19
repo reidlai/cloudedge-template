@@ -12,11 +12,3 @@ resource "google_compute_subnetwork" "egress_subnet" {
   region                   = var.region
   private_ip_google_access = true # CIS GCP Foundation Benchmark 3.9 - Enable Private Google Access
 }
-
-output "egress_vpc_name" {
-  value = google_compute_network.egress_vpc.name
-}
-
-output "egress_vpc_self_link" {
-  value = google_compute_network.egress_vpc.self_link
-}

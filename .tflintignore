@@ -1,0 +1,44 @@
+# TFLint Ignore File
+# Files and directories to exclude from TFLint scanning
+
+# Terraform/OpenTofu internals
+.terraform/
+.terraform.lock.hcl
+**/.terraform/
+
+# External modules
+.external_modules/
+
+# Examples and test fixtures
+examples/
+tests/fixtures/
+
+# Environment-specific variable files (should use .env instead)
+*.auto.tfvars
+terraform.tfvars
+
+# State files
+*.tfstate
+*.tfstate.backup
+*.tfstate.*.backup
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Temporary files
+*.tmp
+.DS_Store
+
+# IDE directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

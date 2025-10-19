@@ -46,7 +46,3 @@ resource "google_compute_global_forwarding_rule" "forwarding_rule" {
   ip_address = google_compute_global_address.lb_ip.address
   port_range = "443"
 }
-
-output "lb_frontend_ip" {
-  value = google_compute_global_address.lb_ip.address
-}

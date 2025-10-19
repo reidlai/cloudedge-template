@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	compute "google.golang.org/api/compute/v1"
 	gcptest "github.com/gruntwork-io/terratest/modules/gcp"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	compute "google.golang.org/api/compute/v1"
 )
 
 // TestFirewallSourceRestriction validates that ingress VPC firewall rules
@@ -22,6 +22,7 @@ import (
 // - Source ranges are restricted to Google Cloud Load Balancer IPs:
 //   - 35.191.0.0/16 (health checks and proxy IPs)
 //   - 130.211.0.0/22 (legacy health checks)
+//
 // - Source ranges do NOT include 0.0.0.0/0 (unrestricted internet access)
 //
 // Test Scenario:
@@ -39,8 +40,8 @@ func TestFirewallSourceRestriction(t *testing.T) {
 
 	// Define expected Google Cloud Load Balancer IP ranges
 	expectedSourceRanges := []string{
-		"35.191.0.0/16",   // GCP Load Balancer health check and proxy IPs
-		"130.211.0.0/22",  // GCP legacy health check IPs
+		"35.191.0.0/16",  // GCP Load Balancer health check and proxy IPs
+		"130.211.0.0/22", // GCP legacy health check IPs
 	}
 
 	// Setup Terraform options
@@ -48,10 +49,10 @@ func TestFirewallSourceRestriction(t *testing.T) {
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir: "../../../",
 		Vars: map[string]interface{}{
-			"project_id":        projectID,
-			"environment":       "nonprod",
-			"cloud_provider":    "gcp",
-			"region":            "northamerica-northeast2",
+			"project_id":     projectID,
+			"environment":    "nonprod",
+			"cloud_provider": "gcp",
+			"region":         "northamerica-northeast2",
 		},
 		EnvVars: map[string]string{
 			"GOOGLE_PROJECT": projectID,

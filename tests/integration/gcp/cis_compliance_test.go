@@ -19,12 +19,12 @@ func TestCISCompliance(t *testing.T) {
 	terraformOptions := &terraform.Options{
 		TerraformDir: "../../../",
 		Vars: map[string]interface{}{
-			"project_id":             projectID,
-			"region":                 region,
-			"environment":            environment,
-			"enable_ingress_vpc":     true,
-			"enable_egress_vpc":      true,
-			"enable_firewall":        true,
+			"project_id":              projectID,
+			"region":                  region,
+			"environment":             environment,
+			"enable_ingress_vpc":      true,
+			"enable_egress_vpc":       true,
+			"enable_firewall":         true,
 			"enable_self_signed_cert": true,
 		},
 	}

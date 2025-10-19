@@ -22,16 +22,16 @@ func TestFullBaseline(t *testing.T) {
 	terraformOptions := &terraform.Options{
 		TerraformDir: "../../../",
 		Vars: map[string]interface{}{
-			"project_id":              projectID,
-			"region":                  region,
-			"environment":             environment,
-			"enable_ingress_vpc":      true,
-			"enable_egress_vpc":       true,
-			"enable_firewall":         true,
-			"enable_waf":              true,
-			"enable_cdn":              true,
-			"enable_dr_loadbalancer":  true,
-			"enable_demo_backend":     true,
+			"project_id":             projectID,
+			"region":                 region,
+			"environment":            environment,
+			"enable_ingress_vpc":     true,
+			"enable_egress_vpc":      true,
+			"enable_firewall":        true,
+			"enable_waf":             true,
+			"enable_cdn":             true,
+			"enable_dr_loadbalancer": true,
+			"enable_demo_backend":    true,
 			// Fix I1: VPC peering removed - not required for PSC architecture
 			"enable_self_signed_cert": true,
 			"enable_logging_bucket":   false, // Fast teardown for testing

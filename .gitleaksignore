@@ -1,0 +1,26 @@
+# Gitleaks Ignore File
+# Files and paths to exclude from secrets scanning
+
+# Terraform/OpenTofu state files (contain generated keys from TLS provider)
+terraform.tfstate
+terraform.tfstate.backup
+*.tfstate
+*.tfstate.backup
+*.tfstate.*.backup
+
+# Terraform/OpenTofu provider documentation (contains example keys)
+**/.terraform/**
+.terraform/**
+
+# Test fixtures with intentional fake credentials
+tests/fixtures/**
+examples/**
+
+# Generated TLS certificates for testing (self-signed)
+*.pem
+*.key
+*.crt
+
+# Git configuration files (contain example patterns)
+.gitleaks.toml
+.gitleaks.baseline

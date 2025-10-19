@@ -21,5 +21,10 @@ description = "Global Allowlist"
 paths = [
   '''\.git/''',
   '''(.*?)(jpg|gif|doc|pdf|bin|svg|socket)$''',
-  '''threat_modelling/reports/.*'''
+  '''threat_modelling/reports/.*''',
+  '''\.terraform/.*''',
+  '''.*\.terraform/.*''',
+  '''terraform\.tfstate.*''',
+  '''\.gitleaks\.toml''',
+  '''\.gitleaks\.baseline'''
 ]

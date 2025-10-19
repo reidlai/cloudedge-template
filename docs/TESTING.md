@@ -16,6 +16,7 @@ cp .env.example .env
 ```
 
 Example `.env`:
+
 ```bash
 TF_VAR_project_id=vibetics-nonprod
 TF_VAR_environment=nonprod
@@ -120,6 +121,7 @@ gcloud compute addresses list --project=$TF_VAR_project_id --global
 **Cause**: Previous test didn't complete cleanup
 
 **Solution**:
+
 ```bash
 source .env
 ./scripts/teardown.sh
@@ -130,6 +132,7 @@ source .env
 **Cause**: Multiple VPCs from failed tests
 
 **Solution**:
+
 ```bash
 source .env
 
@@ -146,6 +149,7 @@ gcloud compute networks delete <network-name> \
 **Cause**: GCP auto-creates firewall rules for VPC connectors
 
 **Solution**:
+
 ```bash
 source .env
 
@@ -161,6 +165,7 @@ gcloud compute networks delete <network-name> \
 ## Test Interpretation
 
 ### Success
+
 ```
 --- PASS: TestFirewallSourceRestriction (613.13s)
 PASS
@@ -168,6 +173,7 @@ ok      vibetics-cloudedge/tests/integration/gcp        613.172s
 ```
 
 ### Failure
+
 ```
 --- FAIL: TestFirewallSourceRestriction (54.30s)
 FAIL
@@ -209,12 +215,14 @@ source .env
 ## Best Practices
 
 ✅ **DO**:
+
 - Always `source .env` before running scripts/tests
 - Review FULL test output for errors
 - Run tests sequentially to avoid quota limits
 - Clean environment before each test run
 
 ❌ **DON'T**:
+
 - Don't rely on return codes only
 - Don't run multiple tests in parallel (quota limits)
 - Don't assume environment is clean

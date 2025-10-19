@@ -11,6 +11,7 @@ python = "^3.12"
 # Security scanning tools (constitution §7)
 checkov = "^3.2.0"           # IaC security scanner (SCA) - blocks on CRITICAL
 semgrep = "^1.95.0"          # SAST scanner - blocks on CRITICAL
+yamllint = "^1.35.1"         # YAML linter for threat model validation
 # Note: gitleaks is a Go binary, install via: go install github.com/gitleaks/gitleaks/v8@latest
 
 [tool.poetry.group.dev.dependencies]

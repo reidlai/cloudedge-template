@@ -9,6 +9,7 @@ This repository contains the Infrastructure as Code (IaC) for the Vibetics Cloud
 The Vibetics CloudEdge platform provides a **6-layer secure baseline infrastructure** designed for cloud-agnostic deployments. This MVP (Feature 001) focuses on establishing the foundational security and networking layers with a demo Cloud Run backend for validation.
 
 **Current MVP Scope**:
+
 - ✅ Edge security layer (WAF with DDoS protection)
 - ✅ Global HTTPS load balancer with domain-based routing capability
 - ✅ Ingress and Egress VPCs with firewall rules
@@ -23,6 +24,7 @@ The Vibetics CloudEdge platform provides a **6-layer secure baseline infrastruct
 **This project provides INFRASTRUCTURE-ONLY deployment.** API management capabilities (authentication, authorization, rate limiting, request validation, API versioning, analytics) are **OUT OF SCOPE** and are the responsibility of applications deployed on this infrastructure.
 
 **What IS Included** (Network-Level Security):
+
 - ✅ WAF for DDoS protection
 - ✅ Firewall rules and VPC isolation
 - ✅ Load Balancer with domain-based routing
@@ -30,6 +32,7 @@ The Vibetics CloudEdge platform provides a **6-layer secure baseline infrastruct
 - ✅ Distributed tracing for infrastructure observability
 
 **What is NOT Included** (Application-Level Security):
+
 - ❌ API Gateway (authentication, rate limiting, request transformation)
 - ❌ API-level security policies (API keys, OAuth, JWT validation)
 - ❌ API analytics and developer portal
@@ -41,6 +44,7 @@ The Vibetics CloudEdge platform provides a **6-layer secure baseline infrastruct
 For detailed scope information, see [Feature Specification](specs/001-create-cloud-agnostic/spec.md#scope-clarification).
 
 **Future Extensibility** (Features 002-003):
+
 - 🔜 Multi-backend support: Application teams can deploy Cloud Run, GKE, or Compute Engine VMs
 - 🔜 True Private Service Connect (PSC) with service attachments for GKE/VM backends (full network isolation)
 - 🔜 Multi-region disaster recovery with automatic health-based failover
@@ -154,6 +158,7 @@ The following diagram shows the **implemented architecture** for this feature:
 ### Access Validation
 
 **✅ Allowed Traffic Path:**
+
 ```bash
 curl -k -H "Host: example.com" https://34.117.156.60
 # → Cloud Armor → HTTPS LB → Backend Service → Serverless NEG → Cloud Run
@@ -161,6 +166,7 @@ curl -k -H "Host: example.com" https://34.117.156.60
 ```
 
 **❌ Blocked Traffic Path:**
+
 ```bash
 curl https://nonprod-demo-api-vbuysgm44q-pd.a.run.app
 # → Direct to Cloud Run URL
@@ -169,10 +175,10 @@ curl https://nonprod-demo-api-vbuysgm44q-pd.a.run.app
 
 ### VPC Connectivity Scenarios
 
-| Scenario                                          | Recommended Solution                               | Why It's Better                                                                                                                            |
-| :------------------------------------------------ | :------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------|
-| Ingress VPC to Cloud Run (Same Project/Organization)        | Internal ALB + Serverless NEG + Cloud Run        | Simpler to configure than PSC, lower complexity, and avoids the "managed service" abstraction when one is not needed.                     |
-| Ingress VPC to VPC B (Different Projects/Organizations) | Private Service Connect (PSC)                      | This is the main use case for PSC. It is designed specifically to allow private consumption of a "published service" across security or administrative boundaries without VPC peering. |
+| Scenario | Recommended Solution | Why It's Better |
+| :---- | :---- | :----|
+| Ingress VPC to Cloud Run (Same Project/Organization) | Internal ALB + Serverless NEG + Cloud Run | Simpler to configure than PSC, lower complexity, and avoids the "managed service" abstraction when one is not needed. |
+| Ingress VPC to VPC B (Different Projects/Organizations) | Internal ALB + Private Service Connect (PSC) + Cloud Run / GKE / Compute Engine | This is the main use case for PSC. It is designed specifically to allow private consumption of a "published service" across security or administrative boundaries without VPC peering. |
 
 ---
 
@@ -183,12 +189,14 @@ The baseline infrastructure is **architected to support** multiple backend types
 #### Planned Capabilities
 
 **Multi-Backend Support** (Future Feature 002):
+
 - Application teams will be able to deploy their own VPCs with Cloud Run, GKE clusters, or Compute Engine VMs
 - Each application VPC connects to the central load balancer via Private Service Connect (PSC)
 - No public IPs on backend services (all traffic flows through central WAF)
 - Domain-based routing maps hostnames to specific application VPCs (e.g., `app1.example.com` → App1 VPC)
 
 **Multi-Region Disaster Recovery** (Future Feature 003):
+
 - Primary + secondary region configuration per application
 - Automatic health-based failover (60-second RTO)
 - Optional geo-affinity routing (EU users → europe-west1)
@@ -203,7 +211,7 @@ The baseline infrastructure is **architected to support** multiple backend types
                           │  Global Anycast IP     │
                           └───────────┬────────────┘
                                       │
-┌─────────────────────────────────────┼─────────────────────────────────────┐
+┌─────────────────────────────────────┼──────────────────────────────────────┐
 │                          EDGE SECURITY LAYER                               │
 │                          ┌──────────▼──────────┐                           │
 │                          │   Cloud Armor (WAF) │                           │
@@ -211,12 +219,12 @@ The baseline infrastructure is **architected to support** multiple backend types
 │                          └──────────┬──────────┘                           │
 │                                     │                                      │
 │                          ┌──────────▼──────────┐                           │
-│                          │   Cloud CDN         │ (OPTIONAL - only for     │
-│                          │  (if static content)│  static content caching) │
+│                          │   Cloud CDN         │ (OPTIONAL - only for      │
+│                          │  (if static content)│  static content caching)  │
 │                          └──────────┬──────────┘                           │
-└─────────────────────────────────────┼─────────────────────────────────────┘
+└─────────────────────────────────────┼──────────────────────────────────────┘
                                       │
-┌─────────────────────────────────────┼─────────────────────────────────────┐
+┌─────────────────────────────────────┼──────────────────────────────────────┐
 │           GLOBAL LOAD BALANCER (Ingress VPC)                               │
 │                    ┌────────────────▼────────────────┐                     │
 │                    │  HTTPS Load Balancer            │                     │
@@ -234,19 +242,19 @@ The baseline infrastructure is **architected to support** multiple backend types
         ┌──────────────────┘          │        └──────────────────┐
         │                             │                           │
         │                             │                           │
-┌───────▼───────┐          ┌──────────▼────────┐         ┌───────▼────────┐
-│ Backend Svc 1 │          │  Backend Svc 2    │         │ Backend Svc 3  │
-│ (Cloud Run)   │          │  (GKE)            │         │ (Compute VMs)  │
-│ Multi-region  │          │  Multi-region     │         │ Multi-region   │
-└───────┬───────┘          └──────────┬────────┘         └────────┬───────┘
-        │                             │                           │
-┌───────▼────────────────────────────────────────────────────────▼────────┐
-│               PRIVATE SERVICE CONNECT (PSC) LAYER                        │
-│   ┌───────────┐         ┌───────────┐         ┌───────────┐            │
-│   │ PSC NEG   │         │ PSC NEG   │         │ PSC NEG   │            │
-│   │ Serverless│         │ VM IP:PORT│         │ VM IP:PORT│            │
-│   └─────┬─────┘         └─────┬─────┘         └─────┬─────┘            │
-└─────────┼─────────────────────┼─────────────────────┼──────────────────┘
+┌───────▼───────┐          ┌──────────▼────────┐         ┌────────▼────────┐
+│ Backend Svc 1 │          │  Backend Svc 2    │         │  Backend Svc 3  │
+│ (Cloud Run)   │          │  (GKE)            │         │  (Compute VMs)  │
+│ Multi-region  │          │  Multi-region     │         │  Multi-region   │
+└───────┬───────┘          └──────────┬────────┘         └─────────┬───────┘
+        │                             │                            │
+┌───────▼──────────────────────────────────────────────────────────▼────────┐
+│               PRIVATE SERVICE CONNECT (PSC) LAYER                         │
+│   ┌───────────┐         ┌───────────┐         ┌───────────┐               │
+│   │ PSC NEG   │         │ PSC NEG   │         │ PSC NEG   │               │
+│   │ Serverless│         │ VM IP:PORT│         │ VM IP:PORT│               │
+│   └─────┬─────┘         └─────┬─────┘         └─────┬─────┘               │
+└─────────┼─────────────────────┼─────────────────────┼─────────────────────┘
           │                     │                     │
 ┌─────────▼──────┐    ┌─────────▼──────┐    ┌─────────▼──────┐
 │   App1 VPC     │    │   App2 VPC     │    │   App3 VPC     │
@@ -263,12 +271,14 @@ The baseline infrastructure is **architected to support** multiple backend types
 ```
 
 **Key Differences from MVP**:
+
 - **Multiple Application VPCs**: Each application team deploys their own isolated VPC
 - **Multi-Backend Types**: Support for Cloud Run, GKE, and Compute Engine VMs
 - **Multi-Region**: Primary + secondary regions for each backend with automatic failover
 - **Production Workloads**: Real application services (not just demo/testing)
 
 **Architecture Readiness**:
+
 - ✅ URL Map already supports multiple host rules (extensible)
 - ✅ Backend services + NEG pattern works for all backend types
 - ✅ PSC demonstrated with demo backend (reusable for production)
@@ -303,18 +313,127 @@ The baseline infrastructure is **architected to support** multiple backend types
 └── variables.tf            # Root module variables
 ```
 
+## Module Dependency Graph
+
+The following diagram illustrates the dependencies between OpenTofu modules and how module outputs are wired to module inputs:
+
+```
+┌─────────────────┐
+│  Ingress VPC    │────┐
+│                 │    │ (outputs: ingress_vpc_name, ingress_vpc_id,
+│  Outputs:       │    │  ingress_subnet_name, ingress_subnet_cidr)
+│  - vpc_name     │    │
+│  - vpc_id       │    ▼
+│  - subnet_name  │  ┌──────────────┐
+│  - subnet_cidr  │  │  Firewall    │
+└─────────────────┘  │              │
+                     │  Inputs:     │
+                     │  - network_name ← ingress_vpc.ingress_vpc_name
+                     └──────────────┘
+
+┌─────────────────┐    ┌──────────────────────┐
+│  Self-Signed    │───▶│  DR Load Balancer    │◀─────┐
+│  Certificate    │    │                      │       │
+│                 │    │  Inputs:             │       │
+│  Outputs:       │    │  - ssl_certificates ← self_signed_cert.self_link
+│  - self_link    │    │  - default_service_id ← demo_backend.backend_service_id
+└─────────────────┘    └──────────────────────┘       │
+                                                      │
+┌─────────────────┐                                   │
+│  Demo Backend   │───────────────────────────────────┘
+│                 │
+│  Outputs:       │
+│  - backend_service_id (wired to DR Load Balancer)
+│  - backend_service_name
+│  - cloud_run_service_name
+│  - cloud_run_service_uri
+│  - serverless_neg_id
+└─────────────────┘
+
+┌─────────────────┐
+│  GCS Bucket     │────┐
+│  (cdn_content)  │    │ (outputs: bucket.name)
+└─────────────────┘    │
+                       ▼
+                  ┌──────────────┐
+                  │     CDN      │
+                  │              │
+                  │  Inputs:     │
+                  │  - bucket_name ← google_storage_bucket.cdn_content.name
+                  │              │
+                  │  Outputs:    │
+                  │  - cdn_backend_id
+                  │  - cdn_backend_name
+                  │  - cdn_backend_self_link
+                  └──────────────┘
+
+┌─────────────────┐
+│  Egress VPC     │  (for future external service connectivity)
+│                 │
+│  Outputs:       │
+│  - egress_vpc_name
+│  - egress_vpc_id
+│  - egress_subnet_name
+│  - egress_subnet_cidr
+└─────────────────┘
+
+┌─────────────────┐
+│  WAF Policy     │  (available for backend service attachment)
+│                 │
+│  Outputs:       │
+│  - waf_policy_name
+│  - waf_policy_id
+│  - waf_policy_self_link
+└─────────────────┘
+
+┌─────────────────┐
+│  Billing Budget │  (monitoring & alerts)
+│                 │
+│  Outputs:       │
+│  - budget_id
+│  - budget_name
+│  - budget_amount
+│  - budget_currency
+└─────────────────┘
+```
+
+### Module Output Wiring Summary
+
+The root `main.tf` wires module outputs to inputs to create a cohesive infrastructure:
+
+| **Consumer Module**   | **Input Variable**       | **Source Module**          | **Output**                    | **Reference Location** |
+|-----------------------|--------------------------|----------------------------|-------------------------------|------------------------|
+| `firewall`            | `network_name`           | `ingress_vpc`              | `ingress_vpc_name`            | main.tf:76             |
+| `cdn`                 | `bucket_name`            | `google_storage_bucket`    | `cdn_content.name`            | main.tf:118            |
+| `dr_loadbalancer`     | `default_service_id`     | `demo_backend`             | `backend_service_id`          | main.tf:171            |
+| `dr_loadbalancer`     | `ssl_certificates`       | `self_signed_cert`         | `self_link`                   | main.tf:172            |
+
+### Root Module Outputs
+
+All module outputs are exposed at the root level for external consumption:
+
+- **Load Balancer**: `load_balancer_ip`, `load_balancer_url`
+- **VPC Networks**: `ingress_vpc_name`, `ingress_vpc_id`, `egress_vpc_name`, `egress_vpc_id`
+- **Security**: `waf_policy_name`, `waf_policy_id`, `firewall_rule_name`
+- **Backend Services**: `demo_backend_service_name`, `cloud_run_service_name`, `cloud_run_service_url`
+- **CDN**: `cdn_backend_name`
+- **Billing**: `billing_budget_id`
+
 ## Quick Start
 
 ### Prerequisites
 
-1.  **Install OpenTofu**: Follow the official instructions at [https://opentofu.org/docs/intro/install/](https://opentofu.org/docs/intro/install/).
-2.  **Install Go**: Required for running Terratest. Follow instructions at [https://golang.org/doc/install](https://golang.org/doc/install).
-3.  **Install Poetry**: Required for Python dependency management (Checkov, Semgrep). Follow instructions at [https://python-poetry.org/docs/#installation](https://python-poetry.org/docs/#installation).
+1. **Install OpenTofu**: Follow the official instructions at [https://opentofu.org/docs/intro/install/](https://opentofu.org/docs/intro/install/).
+2. **Install Go**: Required for running Terratest. Follow instructions at [https://golang.org/doc/install](https://golang.org/doc/install).
+3. **Install Poetry**: Required for Python dependency management (Checkov, Semgrep). Follow instructions at [https://python-poetry.org/docs/#installation](https://python-poetry.org/docs/#installation).
+
     ```bash
     # After installing Poetry, install project dependencies
     poetry install
     ```
-4.  **Install TFLint**: Required for linting OpenTofu/Terraform code. Follow instructions at [https://github.com/terraform-linters/tflint](https://github.com/terraform-linters/tflint).
+
+4. **Install TFLint**: Required for linting OpenTofu/Terraform code. Follow instructions at [https://github.com/terraform-linters/tflint](https://github.com/terraform-linters/tflint).
+
     ```bash
     # macOS/Linux (using install script):
     curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
@@ -328,12 +447,14 @@ The baseline infrastructure is **architected to support** multiple backend types
     # Verify installation:
     tflint --version
     ```
-5.  **Configure Cloud Credentials**: For GCP, ensure your credentials are configured as environment variables (e.g., `GOOGLE_APPLICATION_CREDENTIALS`).
-6.  **Enable Required GCP APIs**: Before the first deployment to a new GCP project, you **MUST** manually enable the necessary APIs. This is a one-time setup step that cannot be automated in OpenTofu without circular dependencies.
+
+5. **Configure Cloud Credentials**: For GCP, ensure your credentials are configured as environment variables (e.g., `GOOGLE_APPLICATION_CREDENTIALS`).
+6. **Enable Required GCP APIs**: Before the first deployment to a new GCP project, you **MUST** manually enable the necessary APIs. This is a one-time setup step that cannot be automated in OpenTofu without circular dependencies.
 
     **Why manual enablement?** API enablement requires project-level permissions that create chicken-egg problems if managed in IaC. Additionally, disabling APIs during `tofu destroy` could accidentally delete resources not managed by this project.
 
     First, ensure your `.env` file is created and sourced, then run:
+
     ```bash
     source .env
     gcloud services enable \
@@ -351,13 +472,14 @@ The baseline infrastructure is **architected to support** multiple backend types
     **Note**: VPC Access Connector API (`vpcaccess.googleapis.com`) is **NOT required** - Serverless NEG provides direct connectivity without VPC Connector.
 
     **Verification**: Confirm all APIs are enabled before running `tofu init`:
+
     ```bash
     gcloud services list --enabled --project="$TF_VAR_project_id" | grep -E 'compute|run|cloudresourcemanager'
     ```
 
     If any APIs are missing, you'll encounter errors during `tofu plan` or `tofu apply`.
 
-7.  **Grant Deployment IAM Roles (Project Owner/Admin Only)**: This is a **one-time bootstrap step** that must be performed by a GCP project owner or admin. If you are a developer without owner/admin access, skip to step 9 and ask your admin to complete steps 7-8.
+7. **Grant Deployment IAM Roles (Project Owner/Admin Only)**: This is a **one-time bootstrap step** that must be performed by a GCP project owner or admin. If you are a developer without owner/admin access, skip to step 9 and ask your admin to complete steps 7-8.
 
     **Who should perform this step?**
     - ✅ GCP Project Owner
@@ -430,6 +552,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     ```
 
     **Verification**: Confirm IAM roles are assigned (may take 60-120 seconds to propagate):
+
     ```bash
     gcloud projects get-iam-policy $TF_VAR_project_id \
       --flatten="bindings[].members" \
@@ -464,7 +587,7 @@ The baseline infrastructure is **architected to support** multiple backend types
 
     **Security Note**: These roles follow the **principle of least privilege** for infrastructure deployment. The `roles/editor` or `roles/owner` roles grant excessive permissions and should NOT be used for deployment accounts.
 
-8.  **Create Service Account for Deployment (CI/CD and Production)**: This section is for **Option B** from Step 7. If you chose **Option A** (user account), skip this step entirely and proceed to Step 9.
+8. **Create Service Account for Deployment (CI/CD and Production)**: This section is for **Option B** from Step 7. If you chose **Option A** (user account), skip this step entirely and proceed to Step 9.
 
     **Who should perform this step?**
     - ✅ GCP Project Owner or Admin (same person who completed Step 7)
@@ -496,6 +619,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     ```
 
     **Verification**: Confirm service account was created:
+
     ```bash
     gcloud iam service-accounts describe $SERVICE_ACCOUNT_EMAIL \
       --project=$TF_VAR_project_id \
@@ -532,6 +656,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     ```
 
     **Verification**: Confirm IAM roles are assigned (may take 60-120 seconds to propagate):
+
     ```bash
     gcloud projects get-iam-policy $TF_VAR_project_id \
       --flatten="bindings[].members" \
@@ -586,6 +711,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     - ✅ **Audit key usage**: Monitor Cloud Logging for service account activity
 
     **Key Rotation** (every 90 days):
+
     ```bash
     # List existing keys
     gcloud iam service-accounts keys list \
@@ -616,7 +742,7 @@ The baseline infrastructure is **architected to support** multiple backend types
 
     **Next steps**: Proceed to **Step 9** to configure Application Default Credentials using this service account.
 
-9.  **Configure Application Default Credentials (ADC)**: After granting IAM roles in steps 7-8, you **MUST** configure Application Default Credentials so that OpenTofu can authenticate and use your permissions. This is a **critical step** that is often missed.
+9. **Configure Application Default Credentials (ADC)**: After granting IAM roles in steps 7-8, you **MUST** configure Application Default Credentials so that OpenTofu can authenticate and use your permissions. This is a **critical step** that is often missed.
 
     **Why is this required?** Google Cloud uses two separate credential systems:
 
@@ -641,6 +767,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     **Use this method if you completed Step 7 Option A and granted IAM roles to your personal Google account.**
 
     **Step 1: Refresh ADC credentials**:
+
     ```bash
     gcloud auth application-default login
     ```
@@ -654,6 +781,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     **Wait for the terminal to show**: `Credentials saved to file: [/home/user/.config/gcloud/application_default_credentials.json]`
 
     **Step 2: Verify ADC credentials are working**:
+
     ```bash
     # Check that a new access token is generated
     gcloud auth application-default print-access-token | cut -c1-50
@@ -683,6 +811,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     **⚠️ Note**: If you already created the service account key in **Step 8** (subsection "Create Service Account Key"), you can skip Step 1 below and proceed directly to Step 2.
 
     **Step 1: Load Environment and Set Service Account Email** (if not already set):
+
     ```bash
     # Load environment variables
     source .env
@@ -693,6 +822,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     ```
 
     **Step 2: Configure ADC to Use the Service Account Key**:
+
     ```bash
     # Set the GOOGLE_APPLICATION_CREDENTIALS environment variable
     # Use the key file path from Step 8 (subsection "Create Service Account Key")
@@ -703,6 +833,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     ```
 
     **Step 3: Make It Permanent** (add to shell profile):
+
     ```bash
     # Add to ~/.bashrc or ~/.zshrc (replace with your actual project ID)
     echo 'export GOOGLE_APPLICATION_CREDENTIALS="$HOME/your-project-id-opentofu-deployer-key.json"' >> ~/.bashrc
@@ -710,6 +841,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     ```
 
     **Step 4: (Optional) Activate the service account for gcloud CLI commands**:
+
     ```bash
     # This allows gcloud commands to also use the service account
     gcloud auth activate-service-account $SERVICE_ACCOUNT_EMAIL \
@@ -720,6 +852,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     ```
 
     **Step 5: Verify Service Account Authentication**:
+
     ```bash
     # Check that ADC is using the service account
     gcloud auth application-default print-access-token | head -c 50
@@ -808,6 +941,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     ```
 
     **Verification**: After backend setup, verify state is stored remotely:
+
     ```bash
     # Check bucket exists
     gsutil ls -b "gs://${TF_VAR_project_id}-${TF_VAR_environment}-tfstate"
@@ -838,6 +972,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     - Create and manage state lock files to prevent concurrent modifications
 
     **Grant state bucket permissions**:
+
     ```bash
     # Ensure .env is loaded
     source .env
@@ -849,6 +984,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     ```
 
     **Verification**: Confirm the service account has the correct permissions:
+
     ```bash
     # View all IAM policies on the bucket
     gcloud storage buckets get-iam-policy "gs://${TF_VAR_project_id}-${TF_VAR_environment}-tfstate"
@@ -863,6 +999,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     **Expected output**: You should see the service account listed with `roles/storage.objectAdmin` role.
 
     **Alternative using gsutil** (if you prefer the legacy command):
+
     ```bash
     # Ensure .env is loaded and set bucket name
     source .env
@@ -876,7 +1013,7 @@ The baseline infrastructure is **architected to support** multiple backend types
     ```
 
     **Troubleshooting**:
-    - **Error: "CommandException: 'iam' command does not support provider-only URLs"** → The bucket name variable is not set. Ensure you've run `source .env` first
+    - **Error: "CommandException: 'IAM' command does not support provider-only URLs"** → The bucket name variable is not set. Ensure you've run `source .env` first
     - **Error: "Permission denied" when granting IAM** → You need `roles/storage.admin` or `roles/owner` to modify bucket IAM policies
     - **Error: "ServiceAccount not found"** → Verify the service account was created in **Step 8** using `gcloud iam service-accounts list`
     - **Error: "403 Permission denied" during `tofu apply` with service account** → The service account lacks state bucket permissions; re-run the command above
@@ -886,19 +1023,21 @@ The baseline infrastructure is **architected to support** multiple backend types
 
 ## Deployment
 
-1.  **Clone the repository**:
+1. **Clone the repository**:
+
     ```bash
     git clone <repository-url>
     cd vibetics-cloudedge
     ```
 
-2.  **Set Environment Variables**: Create a `.env` file in the root of the project from the example template.
+2. **Set Environment Variables**: Create a `.env` file in the root of the project from the example template.
 
     ```bash
     cp .env.example .env
     ```
 
     Edit `.env` and configure your GCP project settings:
+
     ```bash
     TF_VAR_cloud_provider="gcp"
     TF_VAR_project_id="your-gcp-project-id"
@@ -909,7 +1048,8 @@ The baseline infrastructure is **architected to support** multiple backend types
 
     **IMPORTANT**: The `.env` file is already in `.gitignore` to prevent committing secrets.
 
-3.  **Configure Remote State Backend** (RECOMMENDED):
+3. **Configure Remote State Backend** (RECOMMENDED):
+
     ```bash
     source .env
     ./scripts/setup-backend.sh
@@ -923,7 +1063,8 @@ The baseline infrastructure is **architected to support** multiple backend types
 
     **Skip this step** for quick local testing. For production and team collaboration, remote state is required.
 
-4.  **Deploy the infrastructure**:
+4. **Deploy the infrastructure**:
+
     ```bash
     source .env
     ./scripts/deploy.sh
@@ -934,6 +1075,7 @@ The baseline infrastructure is **architected to support** multiple backend types
 ## Teardown
 
 To destroy all infrastructure managed by this deployment, run the following command:
+
 ```bash
 ./scripts/teardown.sh
 ```
@@ -946,9 +1088,9 @@ This project employs a two-tiered, Test-Driven Development (TDD) approach as man
 
 Unit tests are designed to validate the logic of individual OpenTofu modules in isolation, without deploying real resources.
 
--   **Framework**: OpenTofu Native Testing (`tofu test`)
--   **Location**: `*.tftest.hcl` files within each module's directory
--   **Status**: ⚠️ **Not yet implemented** - Native unit tests are planned for future iterations
+- **Framework**: OpenTofu Native Testing (`tofu test`)
+- **Location**: `*.tftest.hcl` files within each module's directory
+- **Status**: ⚠️ **Not yet implemented** - Native unit tests are planned for future iterations
 
 **Note**: Currently, this project uses **Tier 2 integration tests only** (see below). The `tofu test` command will return `0 passed, 0 failed` because no `.tftest.hcl` files exist yet. For testing infrastructure, use the Terratest integration tests described in Tier 2.
 
@@ -956,12 +1098,13 @@ Unit tests are designed to validate the logic of individual OpenTofu modules in 
 
 This tier validates the behavior of the fully deployed infrastructure. It is driven by Behavior-Driven Development (BDD) principles.
 
--   **Framework**: Terratest (Go) with Cucumber for BDD.
--   **Specifications**: Human-readable Gherkin scenarios are defined in `.feature` files within the `features/` directory.
--   **Implementation**: The Go test files in `tests/integration/` and `tests/contract/` implement the steps defined in the Gherkin scenarios.
+- **Framework**: Terratest (Go) with Cucumber for BDD.
+- **Specifications**: Human-readable Gherkin scenarios are defined in `.feature` files within the `features/` directory.
+- **Implementation**: The Go test files in `tests/integration/` and `tests/contract/` implement the steps defined in the Gherkin scenarios.
 
 **How to Run All Integration Tests:**
 This command deploys the infrastructure, runs all integration tests against it, and then tears it down.
+
 ```bash
 cd tests/integration/gcp
 go test -v -timeout 30m
@@ -988,6 +1131,7 @@ go test -v -run TestTeardown -timeout 20m
 
 **How to Run Contract Tests:**
 Contract tests validate IaC compliance using Checkov:
+
 ```bash
 # Ensure Poetry dependencies are installed first
 poetry install
@@ -1003,8 +1147,8 @@ If you see this message, you likely ran `tofu test` instead of the Go integratio
 
 ### Testing in the CI/CD Pipeline
 
--   **Continuous Integration (CI)**: On every Pull Request, the CI pipeline runs static analysis (Checkov, Semgrep) and OpenTofu validation. Unit tests (`.tftest.hcl` files) are planned for future implementation.
--   **Continuous Deployment (CD)**: After a successful deployment to the `nonprod` environment, the CD pipeline will execute the **Tier 2 Integration and Smoke Tests** against the live infrastructure to ensure it is behaving as expected. This is also where post-deployment DAST scans will be run.
+- **Continuous Integration (CI)**: On every Pull Request, the CI pipeline runs static analysis (Checkov, Semgrep) and OpenTofu validation. Unit tests (`.tftest.hcl` files) are planned for future implementation.
+- **Continuous Deployment (CD)**: After a successful deployment to the `nonprod` environment, the CD pipeline will execute the **Tier 2 Integration and Smoke Tests** against the live infrastructure to ensure it is behaving as expected. This is also where post-deployment DAST scans will be run.
 
 ## Security Documentation
 
@@ -1016,67 +1160,637 @@ This project requires threat modeling as part of the security development lifecy
 
 ```
 threat_modelling/
-├── reports/              # Automated threat detection reports
-│   ├── pr-threats.json   # JSON report from CI pipeline (SAST/threat detection)
-│   └── pr-threats.md     # Markdown summary of detected threats
-└── manual/               # Manual threat modeling artifacts (if applicable)
-    ├── STRIDE-analysis.md
-    ├── attack-trees.md
-    └── data-flow-diagrams/
+├── threat-model.yaml           # Threagile threat model definition (version-controlled)
+├── threat-model.example.yaml   # Example template with GCP infrastructure
+├── reports/                    # Auto-generated reports (CI pipeline, NOT version-controlled)
+│   ├── risks.json              # Machine-readable risk findings (Threagile output)
+│   ├── risks.xlsx              # Excel report for human review
+│   ├── report.pdf              # Comprehensive PDF report
+│   ├── data-flow-diagram.png   # Architecture visualization
+│   └── data-asset-diagram.png  # Data flow visualization
+└── manual/                     # Feature-specific manual threat modeling (optional)
+    └── [feature-branch-name]/
+        ├── STRIDE-analysis.md
+        ├── attack-trees.md
+        └── data-flow-diagrams/
 ```
 
-#### Automated Threat Detection (CI Pipeline)
+#### Automated Threat Modeling with Threagile
 
-The CI pipeline automatically runs SAST and threat modeling analysis on every Pull Request to `main`. Results are stored in `threat_modelling/reports/`.
+This project uses **[Threagile](https://threagile.io/)** - an open-source, YAML-based threat modeling toolkit that automatically generates threat reports and diagrams.
 
-**What's analyzed**:
-- Code patterns indicating security vulnerabilities
-- Infrastructure misconfigurations with security implications
-- Attack surface analysis based on infrastructure design
-- Compliance with security best practices (CIS benchmarks)
+- **License**: MIT (free, no login required)
+- **Runs**: Docker container (local) or CI pipeline (automated)
+- **Outputs**: JSON reports, Excel summaries, PDF reports, PNG diagrams
 
-**CI Job**: `ci-sast-threatmodel` (defined in `.github/workflows/ci.yml`)
+##### Development Workflow
 
-**Outputs**:
-- `threat_modelling/reports/pr-threats.json` - Machine-readable findings
-- `threat_modelling/reports/pr-threats.md` - Human-readable summary
-- Automated GitHub issues created for CRITICAL/HIGH severity findings
+1. **Developer updates architecture** (e.g., add new module, change networking)
+2. **Developer updates `threat-model.yaml`** (describe system architecture changes)
+3. **Pre-commit hook validates YAML syntax** (fast, no report generation)
+4. **Developer commits and pushes** to feature branch
+5. **CI pipeline runs Threagile** (generates reports, diagrams, JSON outputs)
+6. **Reports uploaded as GitHub artifacts** (reviewable, auditable)
+7. **CI fails if CRITICAL threats detected** (forces remediation or waiver)
 
-**Viewing automated threat reports**:
+---
 
-1. **After CI completes on your PR**:
+##### Creating Your Threat Model
+
+**First-time setup** (copy template):
+
+```bash
+# Copy example template
+cp threat_modelling/threat-model.example.yaml threat_modelling/threat-model.yaml
+
+# Customize threat-model.yaml to describe your architecture:
+#   - Technical assets (load balancers, VPCs, Cloud Run, etc.)
+#   - Data assets (API requests, logs, state files, secrets)
+#   - Communication links (protocols, encryption, authentication)
+#   - Trust boundaries (internet → GCP, VPC → Cloud Run, etc.)
+#   - Security requirements (CIA triad, compliance controls)
+```
+
+**Example architecture to model** (see `threat-model.example.yaml`):
+
+- External clients → Global Load Balancer → Cloud Armor WAF → Cloud Run Backend
+- Ingress VPC, Egress VPC, VPC peering
+- Data flows: API requests, service logs, OpenTofu state files
+- Trust boundaries: Internet → GCP edge, GCP internal networks
+
+**When to update the threat model**:
+
+- ✅ Adding new modules (WAF, CDN, VPC, etc.)
+- ✅ Changing network architecture (VPC peering, firewall rules)
+- ✅ Modifying data flows (new APIs, external integrations)
+- ✅ Altering security controls (encryption, authentication)
+- ❌ Minor variable changes or cosmetic updates
+
+---
+
+##### Pre-Commit Validation (Local)
+
+Pre-commit hook validates threat model syntax but **does NOT generate reports** (avoiding file modification during commit):
+
+```bash
+# Install pre-commit hooks (if not already installed)
+pre-commit install
+
+# Validate threat model manually
+pre-commit run check-threat-modeling --all-files
+```
+
+**Expected output** (when threat-model.YAML exists and is valid):
+
+```
+✓ Threagile threat model YAML syntax valid
+```
+
+**Expected warnings** (if infrastructure changed without updating threat model):
+
+```
+⚠ WARNING Infrastructure modified but threat model not updated
+  → Infrastructure files (.tf/.go) changed
+  → Threat model threat_modelling/threat-model.yaml not staged
+
+  Action: Review threat model and update if architecture changed
+```
+
+**What pre-commit validates**:
+
+- ✅ `threat-model.yaml` file exists
+- ✅ YAML syntax is valid (via `yamllint`)
+- ⚠️ Warns if infrastructure files modified but threat model unchanged
+- 💡 Suggests creating feature-specific manual threat models for new modules
+
+**What pre-commit does NOT do**:
+
+- ❌ Generate reports (CI pipeline handles this)
+- ❌ Run Threagile analysis (CI pipeline handles this)
+- ❌ Create or modify files (validation only, fast execution ~0.06s)
+
+---
+
+##### CI Pipeline (Automated Report Generation)
+
+**CI Job**: `ci-threat-model` (defined in `.github/workflows/ci.yml`)
+
+**Trigger**: Every push to feature branches and pull requests
+
+**Script**: `./scripts/generate-threat-model.sh`
+
+**Execution**:
+
+```bash
+# CI automatically runs:
+./scripts/generate-threat-model.sh  # CI mode (fails on CRITICAL threats)
+
+# CI job steps:
+# 1. Pull threagile/threagile:latest Docker image
+# 2. Run Threagile analysis on threat-model.yaml
+# 3. Generate reports (JSON, Excel, PDF, PNG diagrams)
+# 4. Analyze risk severity counts (CRITICAL, HIGH, MEDIUM, LOW)
+# 5. Upload reports as GitHub artifacts
+# 6. Fail build if CRITICAL threats detected (exit code 1)
+```
+
+**Outputs** (uploaded as `threat-model-reports.zip` artifact):
+
+| File | Format | Purpose |
+|------|--------|---------|
+| `risks.json` | JSON | Machine-readable findings (for tooling integration) |
+| `risks.xlsx` | Excel | Human-readable report with severity breakdown |
+| `report.pdf` | PDF | Comprehensive threat model documentation |
+| `data-flow-diagram.png` | PNG | Architecture visualization with trust boundaries |
+| `data-asset-diagram.png` | PNG | Data flow visualization with CIA ratings |
+
+**CI Console Output** (example):
+
+```
+═══════════════════════════════════════════════════════════════
+  Threat Modeling Results Summary
+═══════════════════════════════════════════════════════════════
+  CRITICAL: 0
+  HIGH:     2
+  MEDIUM:   5
+  LOW:      8
+═══════════════════════════════════════════════════════════════
+
+✓ Threat modeling report generation complete
+ℹ Reports available at: threat_modelling/reports/
+```
+
+**Viewing CI-generated reports**:
+
+1. **Download GitHub Actions artifacts**:
+   - Navigate to: **Actions** → **Your Workflow Run** → **Artifacts** → **threat-model-reports.zip**
+   - Extract the ZIP file locally
+   - Or use GitHub CLI: `gh run download [run-id] -n threat-model-reports`
+
+2. **Review reports locally**:
+
    ```bash
-   # View Markdown summary
-   cat threat_modelling/reports/pr-threats.md
+   # View risk summary (JSON)
+   cat threat_modelling/reports/risks.json | jq '.risks[] | {severity, title, description}'
 
-   # View JSON report (for tooling integration)
-   cat threat_modelling/reports/pr-threats.json | jq
+   # Filter CRITICAL/HIGH risks
+   cat threat_modelling/reports/risks.json | jq '.risks[] | select(.severity == "critical" or .severity == "high")'
+
+   # Open Excel report
+   open threat_modelling/reports/risks.xlsx
+
+   # View architecture diagrams
+   open threat_modelling/reports/data-flow-diagram.png
+   open threat_modelling/reports/data-asset-diagram.png
    ```
 
-2. **Check GitHub Issues**:
-   - Issues are auto-created with labels: `security`, `threat-model`, `severity:critical`, `severity:high`
-   - Navigate to: Repository → Issues → Filter by `label:threat-model`
+3. **Check auto-created GitHub Issues** (for CRITICAL/HIGH severity):
+   - **Labels**: `security`, `threat-model`, `severity:critical`, `severity:high`
+   - **Navigate**: Repository → Issues → Filter by `label:threat-model`
+   - **Issue content**: Risk description, mitigation advice, affected assets
 
-**Severity Levels** (from constitution §7):
+**What Threagile analyzes**:
 
-| Severity | Blocks Deployment | Action Required |
-|----------|------------------|-----------------|
-| **CRITICAL** | ✅ Yes | Must fix or provide approved waiver |
-| **HIGH** | ✅ Yes | Must fix or provide approved time-boxed waiver |
-| **MEDIUM** | ❌ No | Must acknowledge and plan remediation |
-| **LOW** | ❌ No | Optional, recommended to address |
+- ✅ Architecture security patterns (trust boundaries, encryption, authentication)
+- ✅ Communication link security (TLS versions, VPN usage, IP filtering)
+- ✅ Data asset protection (confidentiality, integrity, availability ratings)
+- ✅ Attack surface analysis (internet-facing assets, exposed services)
+- ✅ STRIDE threat categories (Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege)
+- ✅ Compliance alignment (security best practices, CIS benchmarks)
 
-**Waiver Process** (for CRITICAL/HIGH findings):
-1. Document the risk assessment in the PR description
+**Severity levels** (from constitution §7):
+
+| Severity | Blocks CI | Blocks Deployment | Action Required |
+|----------|-----------|-------------------|-----------------|
+| **CRITICAL** | ✅ Yes | ✅ Yes | Must fix before merge OR provide approved waiver |
+| **HIGH** | ❌ No | ✅ Yes | Must fix before deployment OR time-boxed waiver |
+| **MEDIUM** | ❌ No | ❌ No | Must acknowledge and plan remediation |
+| **LOW** | ❌ No | ❌ No | Optional, recommended to address |
+
+**Waiver process** (for CRITICAL/HIGH findings):
+
+1. Document risk assessment in PR description
 2. Provide mitigation plan or compensating controls
 3. Get approval from security lead or tech lead
-4. Attach waiver with time-box (e.g., "Accept risk until [date], remediate in [ticket]")
+4. Attach time-boxed waiver (e.g., "Accept risk until 2025-12-01, remediate in JIRA-1234")
+5. Add waiver to `threat_modelling/waivers/[risk-id].md` (for audit trail)
+
+---
+
+##### Running Threat Modeling Locally
+
+For local testing and development, you can generate threat model reports on your machine without waiting for CI.
+
+**Prerequisites**:
+
+- Go 1.20+ installed ([install guide](https://go.dev/doc/install))
+- `threat_modelling/threat-model.yaml` exists (production-ready threat model provided)
+
+**One-Time Setup** (Build Required Plugin):
+
+```bash
+# Install Threagile from source
+go install github.com/threagile/threagile@latest
+
+# Build the raa.so plugin (Risk Assessment Algorithm)
+# This plugin is required by Threagile but not included in releases
+cd ~/.gvm/pkgsets/go*/global/pkg/mod/github.com/threagile/threagile@v*/
+go build -buildmode=plugin -o $OLDPWD/threat_modelling/raa.so raa/raa/raa.go
+cd -
+
+# Verify plugin was built
+ls -lh threat_modelling/raa.so
+# Expected: -rwxrwxrwx 1 user user 6.4M ... raa.so
+```
+
+**Generate Threat Model Reports**:
+
+```bash
+cd threat_modelling
+
+# Generate JSON reports (recommended - diagrams require additional dependencies)
+threagile -model threat-model.yaml -output reports \
+  -generate-data-flow-diagram=false \
+  -generate-data-asset-diagram=false \
+  -generate-report-pdf=false \
+  -generate-risks-excel=false \
+  -generate-tags-excel=false
+
+# View generated reports
+ls -lh reports/
+# Expected output:
+#   risks.json               - Risk findings with severity levels
+#   stats.json               - Statistics summary
+#   technical-assets.json    - Asset inventory
+```
+
+**Analyze Results**:
+
+```bash
+# View risk summary by severity and status
+jq '{total_risks: (. | length), by_severity: (group_by(.severity) | map({severity: .[0].severity, count: length})), by_status: (group_by(.risk_status) | map({status: .[0].risk_status, count: length}))}' reports/risks.json
+
+# Example output:
+# {
+#   "total_risks": 15,
+#   "by_severity": [
+#     {"severity": "elevated", "count": 2},
+#     {"severity": "medium", "count": 9},
+#     {"severity": "low", "count": 4}
+#   ],
+#   "by_status": [
+#     {"status": "false-positive", "count": 2},
+#     {"status": "unchecked", "count": 13}
+#   ]
+# }
+
+# View specific severity risks with details
+jq '.[] | select(.severity == "elevated") | {title, risk_status, synthetic_id}' reports/risks.json
+
+# List all unchecked risks
+jq '.[] | select(.risk_status == "unchecked") | {severity, title, synthetic_id}' reports/risks.json
+```
+
+**Working with Threat Findings (Risk Tracking)**:
+
+When Threagile identifies threats, you need to triage and document each finding. This is done via the `risk_tracking` section in `threat-model.yaml`.
+
+**Step 1: Identify the Risk**
+
+```bash
+# List all risks that need triage (unchecked status)
+cd threat_modelling
+jq '.[] | select(.risk_status == "unchecked") | {severity, title, synthetic_id}' reports/risks.json
+
+# Example output:
+# {
+#   "severity": "elevated",
+#   "title": "<b>Unguarded Access from Internet</b>...",
+#   "synthetic_id": "unguarded-access-from-internet@cloud-run-backend@global-https-lb@global-https-lb>lb-to-cloud-run"
+# }
+```
+
+**Step 2: Copy the `synthetic_id`** (this is the risk ID you'll use in risk_tracking)
+
+**Step 3: Add Risk Tracking Entry to threat-model.yaml**
+
+Edit `threat_modelling/threat-model.yaml` and add to the `risk_tracking:` section at the end of the file:
+
+```yaml
+risk_tracking:
+
+  # Example 1: Mark as FALSE POSITIVE (risk doesn't apply to this architecture)
+  unguarded-access-from-internet@cloud-run-backend@global-https-lb@global-https-lb>lb-to-cloud-run:
+    status: false-positive
+    justification: >
+      This is edge infrastructure providing networking layer only. Application teams
+      deploy their own API Gateways (Cloud Endpoints, Apigee, Kong) inside Cloud Run
+      containers. Authentication happens at the application layer, not infrastructure layer.
+
+      Defense-in-Depth Layers:
+      1. Infrastructure (this project): Global HTTPS LB + Cloud Armor WAF
+      2. Application (app teams): API Gateway with OAuth 2.0/JWT/API keys
+
+      Threagile correctly identifies no auth at infrastructure layer, but this is
+      intentional - authentication is responsibility of application workloads.
+    ticket: INFRA-001
+    date: 2025-10-18
+    checked_by: DevSecOps Team
+
+  # Example 2: Mark as ACCEPTED (risk acknowledged, won't fix)
+  missing-build-pipeline@cloud-run-backend:
+    status: accepted
+    justification: >
+      Demo backend is for infrastructure testing only, not production application.
+      Production applications MUST implement proper CI/CD pipelines with SAST, SCA,
+      container scanning, and automated deployment. Build pipeline security is
+      responsibility of application teams, not edge infrastructure.
+    ticket: INFRA-003
+    date: 2025-10-18
+    checked_by: DevSecOps Team
+
+  # Example 3: Mark as MITIGATED (risk has been fixed)
+  missing-waf@global-https-lb:
+    status: mitigated
+    justification: >
+      Cloud Armor WAF has been deployed with OWASP Top 10 rules, rate limiting,
+      adaptive DDoS protection, and geo-blocking capabilities. See main.tf lines 250-320.
+    ticket: INFRA-004
+    date: 2025-10-18
+    checked_by: DevSecOps Team
+
+  # Example 4: Mark as IN-DISCUSSION (team is evaluating)
+  missing-network-segmentation@egress-vpc:
+    status: in-discussion
+    justification: >
+      Evaluating whether egress VPC should be further segmented by application tier.
+      Pending architecture review meeting on 2025-10-25.
+    ticket: INFRA-005
+    date: 2025-10-18
+    checked_by: Security Lead
+```
+
+**Step 4: Regenerate Reports to Verify**
+
+```bash
+# Regenerate threat model
+threagile -model threat-model.yaml -output reports \
+  -generate-data-flow-diagram=false \
+  -generate-data-asset-diagram=false \
+  -generate-report-pdf=false \
+  -generate-risks-excel=false \
+  -generate-tags-excel=false
+
+# Verify risk status changed from "unchecked" to your chosen status
+jq '.[] | select(.synthetic_id == "unguarded-access-from-internet@cloud-run-backend@global-https-lb@global-https-lb>lb-to-cloud-run") | {title, risk_status}' reports/risks.json
+
+# Expected output:
+# {
+#   "title": "<b>Unguarded Access from Internet</b>...",
+#   "risk_status": "false-positive"
+# }
+```
+
+**Risk Status Options**:
+
+| Status | When to Use | CI/CD Behavior |
+|--------|-------------|----------------|
+| `false-positive` | Risk doesn't apply to this architecture/design | Pass (risk ignored) |
+| `mitigated` | Risk has been fixed/addressed | Pass (risk resolved) |
+| `accepted` | Risk acknowledged, decision made not to fix | Pass (documented acceptance) |
+| `in-discussion` | Team is evaluating the risk | Warn (needs decision) |
+| `unchecked` | Risk not yet triaged (default) | Fail (requires action) |
+
+**Making Threagile Pass in CI/CD**:
+
+For CI/CD to pass, all risks with severity >= threshold must be tracked:
+
+```yaml
+# In .github/workflows/threat-model.yaml or similar
+- name: Check for untracked risks
+  run: |
+    cd threat_modelling
+    UNTRACKED=$(jq '[.[] | select(.risk_status == "unchecked" and (.severity == "critical" or .severity == "elevated"))] | length' reports/risks.json)
+    if [ "$UNTRACKED" -gt 0 ]; then
+      echo "ERROR: $UNTRACKED critical/elevated risks are not tracked in risk_tracking section"
+      jq '.[] | select(.risk_status == "unchecked" and (.severity == "critical" or .severity == "elevated")) | {severity, title, synthetic_id}' reports/risks.json
+      exit 1
+    fi
+```
+
+**Best Practices**:
+
+1. **Use `synthetic_id` exactly as generated** - Threagile is strict about ID format
+2. **Document justifications thoroughly** - Include WHY the decision was made
+3. **Reference tickets** - Link to GitHub issues, JIRA tickets, or ADRs
+4. **Get approval** - Have security lead or PO review and check-by
+5. **Triage promptly** - Don't leave risks in `unchecked` status
+6. **Re-evaluate periodically** - Accepted risks may need revisiting as architecture evolves
+
+**Common Pitfalls**:
+
+```bash
+# WRONG: Using abbreviated risk ID
+xxe@global-https-lb:  # ❌ Will fail with "risk id not found"
+
+# CORRECT: Using full synthetic_id from risks.json
+xml-external-entity@global-https-lb:  # ✅ Matches generated ID
+
+# WRONG: Typo in status
+status: accept  # ❌ Invalid status
+
+# CORRECT: Use exact status values
+status: accepted  # ✅ Valid status
+```
+
+**Why Diagrams/Excel Are Disabled**:
+
+- **Diagrams**: Require `render-data-flow-diagram.sh` script (missing from standard Threagile installation)
+- **Excel**: Sheet name length limitations with long technical asset names
+- **Recommendation**: Use JSON output for local development, CI pipeline handles full reports
+
+**Alternative: Use Docker** (if raa.so plugin issues):
+
+The production threat model (`threat-model.yaml`) is ready to use with CI/CD pipelines which use the official Docker image. For local development, the Go-based approach above is recommended.
+
+**Expected output** (when threat-model.yaml exists):
+
+```text
+ℹ Starting Threagile threat modeling report generation...
+ℹ Mode: LOCAL
+
+ℹ Validating prerequisites...
+✓ Docker found: Docker version 28.4.0, build d8eb465
+✓ Threat model found: threat_modelling/threat-model.yaml
+✓ Reports directory ready: threat_modelling/reports
+
+ℹ Pulling Threagile Docker image...
+✓ Threagile image pulled successfully
+
+ℹ Generating threat model reports with Threagile...
+✓ Threagile analysis completed
+
+ℹ Analyzing threat modeling results...
+═══════════════════════════════════════════════════════════════
+  Threat Modeling Results Summary
+═══════════════════════════════════════════════════════════════
+  CRITICAL: 0
+  HIGH:     2
+  MEDIUM:   5
+  LOW:      8
+═══════════════════════════════════════════════════════════════
+
+✓ Threat modeling report generation complete
+ℹ Reports available at: threat_modelling/reports/
+
+ℹ View reports:
+ℹ   JSON:   cat threat_modelling/reports/risks.json | jq
+ℹ   Excel:  open threat_modelling/reports/risks.xlsx
+ℹ   Images: open threat_modelling/reports/*.png
+```
+
+**If threat-model.yaml doesn't exist**:
+
+```text
+ℹ Starting Threagile threat modeling report generation...
+ℹ Mode: LOCAL
+
+ℹ Validating prerequisites...
+✓ Docker found: Docker version 28.4.0, build d8eb465
+✗ Threat model not found: threat_modelling/threat-model.yaml
+✗ Create threat_modelling/threat-model.yaml before running this script
+
+# To fix: Copy the example template
+cp threat_modelling/threat-model.example.yaml threat_modelling/threat-model.yaml
+```
+
+**Compliance Mappings**:
+
+The production threat model (`threat-model.yaml`) includes comprehensive compliance mappings:
+
+- **OWASP Top 10 2021**: All categories (A01-A10) with mitigation strategies
+- **CIS GCP Foundations**: Network security (3.x), IAM policies (7.x)
+- **NIST 800-53 Rev 5**: AC (Access Control), AU (Audit), SC (Network Security)
+- **SOC 2 Type II**: Trust Service Criteria (CC6.1, CC6.2, CC6.6, CC7.2)
+
+**Current Risk Profile** (from production threat-model.yaml):
+
+- **Total Risks**: 15
+- **Severity Breakdown**: 2 elevated (both false-positive), 9 medium, 4 low
+- **Risk Status**: 2 false-positive, 13 unchecked (require triage)
+- **No CRITICAL risks detected**
+
+The 2 elevated risks are marked as false-positive:
+
+1. **Unguarded Access from Internet**: Edge infrastructure design - application teams deploy API Gateways in Cloud Run
+2. **XML External Entity (XXE)**: JSON-only APIs - no XML parsing at any layer
+
+**Pre-Commit Hook Integration**:
+
+The threat modeling validation runs automatically on every commit via pre-commit hooks:
+
+```bash
+# Automatic validation on every commit (fast - uses existing reports)
+git commit -m "feat: add new module"
+# Output:
+# Threagile Threat Model Validation........................................Passed
+# ✓ Threat model YAML syntax valid
+# ℹ Using existing threat reports (threat-model.yaml unchanged)
+# ✓ All critical/elevated risks tracked (2/15 risks addressed)
+
+# Force full report generation on commit (slow - regenerates reports)
+THREAGILE_FULL_REPORT=1 git commit -m "feat: update threat model"
+# Output:
+# ℹ THREAGILE_FULL_REPORT=1 - Generating full threat analysis...
+# ✓ Threat model reports generated successfully
+# ✓ All critical/elevated risks tracked (2/15 risks addressed)
+
+# Run threat model check manually without committing
+pre-commit run check-threat-modeling --all-files
+
+# Run with full report generation
+THREAGILE_FULL_REPORT=1 pre-commit run check-threat-modeling --all-files
+```
+
+**Pre-Commit Behavior**:
+
+| Scenario | Action Taken | Speed | Exit Code |
+|----------|-------------|-------|-----------|
+| threat-model.yaml unchanged + reports exist | Validate existing reports only | ~1s | 0 if no untracked critical/elevated |
+| threat-model.yaml modified | Regenerate reports + validate | ~10-30s | 0 if no untracked critical/elevated |
+| No reports exist | Generate initial reports + validate | ~10-30s | 0 if no untracked critical/elevated |
+| THREAGILE_FULL_REPORT=1 | Force full regeneration + validate | ~10-30s | 0 if no untracked critical/elevated |
+| Critical/elevated risks unchecked | List untracked risks + FAIL | N/A | 1 (blocks commit) |
+| Threagile not installed | Skip validation (warn only) | ~1s | 0 (allows commit) |
+
+**What Gets Checked**:
+
+1. **YAML Syntax**: Validates threat-model.yaml is well-formed
+2. **Report Generation**: Automatically regenerates if threat-model.yaml changed
+3. **Untracked Risks**: BLOCKS commit if any CRITICAL or ELEVATED risks are `unchecked`
+4. **Infrastructure Changes**: Warns if .tf/.go files changed but threat model wasn't updated
+
+**Example: Pre-Commit Blocking Untracked Risks**:
+
+```bash
+# Attempt to commit with untracked critical risks
+git commit -m "feat: add new module"
+
+# Output:
+# Threagile Threat Model Validation........................................Failed
+# - hook id: check-threat-modeling
+# - exit code: 1
+#
+# ✗ FAIL 2 critical/elevated risk(s) require triage in threat-model.yaml
+#
+#   Untracked Risks:
+#   - [ELEVATED] Unguarded Access from Internet of Cloud Run Backend...
+#   - [ELEVATED] XML External Entity (XXE) risk at Global HTTPS Load Balancer
+#
+#   Action Required:
+#   1. Review risks: jq '.[] | select(.risk_status == "unchecked")' threat_modelling/reports/risks.json
+#   2. Add risk_tracking entries to threat_modelling/threat-model.yaml (see README.md)
+#   3. Regenerate: cd threat_modelling && threagile -model threat-model.yaml -output reports ...
+#
+#   Documentation: README.md (search 'Working with Threat Findings')
+#   Quick Reference: threat_modelling/RISK_TRACKING_GUIDE.md
+```
+
+**Troubleshooting**:
+
+```bash
+# Verify Go installation
+go version
+# Expected: go version go1.20+ linux/amd64
+
+# Verify Threagile installation
+which threagile
+# Expected: path to threagile binary
+
+# Verify raa.so plugin exists
+ls -lh threat_modelling/raa.so
+# Expected: ~6.4M plugin file
+
+# If raa.so is missing, rebuild it
+cd ~/.gvm/pkgsets/go*/global/pkg/mod/github.com/threagile/threagile@v*/
+go build -buildmode=plugin -o $OLDPWD/threat_modelling/raa.so raa/raa/raa.go
+cd -
+
+# Verify threat-model.yaml syntax
+yamllint threat_modelling/threat-model.yaml
+# Expected: No errors
+
+# Validate YAML against Threagile schema (if available)
+docker run --rm -v "$(pwd)/threat_modelling:/app/work" \
+  threagile/threagile:latest validate --input /app/work/threat-model.yaml
+```
 
 #### Manual Threat Modeling (STRIDE Methodology)
 
 For major features or architectural changes, manual threat modeling should be conducted using the STRIDE framework.
 
 **When to perform manual threat modeling**:
+
 - ✅ New infrastructure architecture (e.g., adding DR, multi-region)
 - ✅ New security boundaries (e.g., VPC peering, service mesh)
 - ✅ External integrations (e.g., API Gateway, third-party services)
@@ -1097,6 +1811,7 @@ For major features or architectural changes, manual threat modeling should be co
 **How to create a manual threat model**:
 
 1. **Create a data flow diagram** (DFD):
+
    ```bash
    # Create directory for your feature
    mkdir -p threat_modelling/manual/feature-name/
@@ -1112,6 +1827,7 @@ For major features or architectural changes, manual threat modeling should be co
    - Cloud Run → External APIs
 
 3. **Apply STRIDE to each component and boundary**:
+
    ```bash
    # Create STRIDE analysis document
    cat > threat_modelling/manual/feature-name/STRIDE-analysis.md <<EOF
@@ -1143,6 +1859,7 @@ For major features or architectural changes, manual threat modeling should be co
    ```
 
 4. **Document attack trees** (optional, for complex features):
+
    ```bash
    # Create attack tree diagram
    cat > threat_modelling/manual/feature-name/attack-trees.md <<EOF
@@ -1151,6 +1868,7 @@ For major features or architectural changes, manual threat modeling should be co
    ## Attack Goal: Gain unauthorized access to Cloud Run backend
 
    ```
+
    [Root] Unauthorized Access to Backend
    ├── [AND] Bypass WAF
    │   ├── Exploit WAF rule gap
@@ -1161,6 +1879,7 @@ For major features or architectural changes, manual threat modeling should be co
    └── [OR] Direct access to Cloud Run
        ├── Find exposed Cloud Run URL (BLOCKED by ingress policy)
        └── Compromise VPC network (LOW likelihood)
+
    ```
    EOF
    ```
@@ -1183,6 +1902,7 @@ For major features or architectural changes, manual threat modeling should be co
   - Mermaid in Markdown (supported in GitHub)
 
 **Example Mermaid diagram** (paste in Markdown):
+
 ```mermaid
 graph LR
     A[External User] -->|HTTPS| B[Cloud Armor WAF]
@@ -1201,6 +1921,7 @@ graph LR
 For the baseline infrastructure (Feature 001), see the **Key Security Controls** section in the [Architecture Overview](#current-architecture-single-region-mvp-with-demo-backend) above.
 
 **Threat Model Status**:
+
 - ✅ Automated threat detection via CI pipeline
 - ✅ Defense-in-depth architecture (WAF, Firewall, Ingress Policy)
 - ⚠️ Manual STRIDE analysis: Recommended for Feature 002 (multi-backend) and Feature 003 (DR)
@@ -1237,6 +1958,7 @@ The repository maintains three protected branches representing different stages 
 | **`prod`** | Production-ready releases | `prod` environment (application teams + production) | PR-only, requires nonprod validation + approval |
 
 **Important Notes**:
+
 - **No direct pushes** to protected branches (main, nonprod, prod)
 - All work happens on **issue branches** created from GitHub issues
 - The `nonprod` environment is reserved for **infrastructure team testing only** - application teams cannot use this environment
@@ -1313,6 +2035,7 @@ Tags are automatically created at each promotion stage to enable traceability an
 All protected branches enforce these requirements:
 
 **`main` branch**:
+
 - ✅ Require pull request reviews (minimum 1 approval)
 - ✅ Require status checks to pass (CI pipeline)
 - ✅ Require conversation resolution before merge
@@ -1320,6 +2043,7 @@ All protected branches enforce these requirements:
 - ✅ No deletions
 
 **`nonprod` branch**:
+
 - ✅ All `main` branch rules +
 - ✅ Require successful deployment to nonprod environment
 - ✅ Require integration tests to pass
@@ -1327,6 +2051,7 @@ All protected branches enforce these requirements:
 - ✅ Require DAST scan to pass
 
 **`prod` branch**:
+
 - ✅ All `nonprod` branch rules +
 - ✅ Require explicit approval from maintainer/release manager
 - ✅ Require successful blue/green tag validation
@@ -1337,6 +2062,7 @@ All protected branches enforce these requirements:
 If production deployment fails (step 20 in workflow above):
 
 1. **Automated rollback triggers**:
+
    ```bash
    # CI detects test failures in prod deployment
    # Automatically executed:
@@ -1345,6 +2071,7 @@ If production deployment fails (step 20 in workflow above):
    ```
 
 2. **Manual rollback** (if needed):
+
    ```bash
    # Find the last known good production commit
    git log --oneline --decorate | grep prod-
@@ -1371,6 +2098,7 @@ Branch names must follow GitHub issue number format:
 | `<issue#>-hotfix-<description>` | `124-hotfix-firewall-rule` | Production hotfix |
 
 **Creating an issue branch**:
+
 ```bash
 # From GitHub Issues page:
 # 1. Create new issue
@@ -1439,6 +2167,7 @@ Before committing code, format and lint your code to ensure consistency and catc
 #### Prerequisites
 
 Ensure Poetry dependencies are installed:
+
 ```bash
 poetry install
 ```
@@ -1446,12 +2175,14 @@ poetry install
 #### OpenTofu/Terraform Files (*.tf)
 
 **1. Format OpenTofu code** (auto-fix):
+
 ```bash
 # Format all .tf files in the current directory and subdirectories
 tofu fmt -recursive .
 ```
 
 **What it does**:
+
 - Rewrites OpenTofu configuration files to a canonical format
 - Adjusts indentation, spacing, and alignment
 - Sorts blocks and arguments
@@ -1459,6 +2190,7 @@ tofu fmt -recursive .
 **When to run**: Before every commit that modifies `.tf` files
 
 **2. Validate OpenTofu syntax**:
+
 ```bash
 # Initialize OpenTofu (required before validation)
 tofu init
@@ -1468,6 +2200,7 @@ tofu validate
 ```
 
 **What it checks**:
+
 - Syntax errors
 - Invalid attribute names
 - Missing required arguments
@@ -1476,6 +2209,7 @@ tofu validate
 **When to run**: After making changes to module structure or variable definitions
 
 **3. Lint OpenTofu code (optional - requires tflint)**:
+
 ```bash
 # Install tflint (one-time setup)
 # macOS/Linux:
@@ -1489,6 +2223,7 @@ tflint --recursive
 ```
 
 **What it checks**:
+
 - Provider-specific best practices
 - Deprecated syntax
 - Unused variables and outputs
@@ -1499,6 +2234,7 @@ tflint --recursive
 #### Python Files (*.py) - Test Scripts
 
 **1. Format Python code with Black** (auto-fix):
+
 ```bash
 # Format specific file
 poetry run black path/to/file.py
@@ -1511,10 +2247,12 @@ poetry run black .
 ```
 
 **Configuration**: See `[tool.black]` in `pyproject.toml`
+
 - Line length: 100 characters
 - Target: Python 3.12
 
 **2. Sort imports with isort** (auto-fix):
+
 ```bash
 # Sort imports in specific file
 poetry run isort path/to/file.py
@@ -1527,10 +2265,12 @@ poetry run isort .
 ```
 
 **Configuration**: See `[tool.isort]` in `pyproject.toml`
+
 - Profile: black (compatible with Black formatter)
 - Line length: 100 characters
 
 **3. Run both formatters together** (recommended):
+
 ```bash
 # Format and sort imports for all Python files
 poetry run black . && poetry run isort .
@@ -1552,6 +2292,7 @@ poetry run ruff check --fix .
 ```
 
 **Alternative with flake8**:
+
 ```bash
 # Add flake8 to dev dependencies
 poetry add --group dev flake8
@@ -1563,6 +2304,7 @@ poetry run flake8 tests/
 #### Go Files (*.go) - Test Files
 
 **1. Format Go code**:
+
 ```bash
 # Format all Go files in tests directory
 go fmt ./tests/...
@@ -1572,6 +2314,7 @@ go fmt path/to/file.go
 ```
 
 **2. Lint Go code**:
+
 ```bash
 # Install golangci-lint (one-time setup)
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -1583,6 +2326,7 @@ golangci-lint run ./tests/...
 #### Markdown Files (*.md)
 
 **1. Lint Markdown** (optional):
+
 ```bash
 # Install markdownlint-cli (one-time setup)
 npm install -g markdownlint-cli
@@ -1592,6 +2336,7 @@ markdownlint '**/*.md' --ignore node_modules
 ```
 
 **2. Check links** (optional):
+
 ```bash
 # Install markdown-link-check (one-time setup)
 npm install -g markdown-link-check
@@ -1600,9 +2345,10 @@ npm install -g markdown-link-check
 markdown-link-check README.md
 ```
 
-#### YAML Files (*.yaml, *.yml)
+#### YAML Files (*.YAML,*.yml)
 
 **1. Lint YAML files**:
+
 ```bash
 # Install yamllint via Poetry (add to pyproject.toml)
 poetry add --group dev yamllint
@@ -1614,6 +2360,7 @@ poetry run yamllint .
 #### Quick Commands Cheatsheet
 
 **Before every commit**:
+
 ```bash
 # Format OpenTofu files
 tofu fmt -recursive .
@@ -1626,6 +2373,7 @@ go fmt ./tests/...
 ```
 
 **Before creating a PR**:
+
 ```bash
 # Full formatting and validation
 tofu fmt -recursive . && \
@@ -1636,22 +2384,26 @@ go fmt ./tests/...
 ```
 
 **Automated via pre-commit hooks** (see Pre-commit Hooks section below):
+
 - Running `git commit` will automatically format code if pre-commit hooks are installed
 - Pre-commit hooks run formatters and linters on staged files only
 
 #### Common Formatting Issues
 
 **OpenTofu/Terraform**:
+
 - `Inconsistent indentation` → Run `tofu fmt -recursive .`
 - `Blocks not sorted` → Run `tofu fmt` (automatically sorts)
 - `Trailing whitespace` → Run `tofu fmt` (automatically removes)
 
 **Python**:
+
 - `Line too long` → Black wraps automatically to 100 characters
 - `Imports not sorted` → Run `isort`
 - `Missing docstrings` → Add docstrings (linters will detect)
 
 **Go**:
+
 - `Imports not grouped` → `go fmt` handles automatically
 - `Unused variables` → Linter will catch, remove them
 
@@ -1672,6 +2424,7 @@ Before committing code, you should run security scans locally to catch issues ea
 #### Prerequisites
 
 Ensure Poetry dependencies are installed:
+
 ```bash
 poetry install
 ```
@@ -1681,6 +2434,7 @@ poetry install
 **Option 1: Run all scans individually**
 
 1. **SAST (Static Application Security Testing) - Semgrep**:
+
    ```bash
    # Scan for security vulnerabilities in code
    poetry run semgrep scan --config=auto --severity=ERROR --severity=WARNING .
@@ -1691,6 +2445,7 @@ poetry install
    **Expected output**: `No findings` or a list of security issues with severity levels
 
 2. **SCA (Software Composition Analysis) - Checkov**:
+
    ```bash
    # Scan OpenTofu/Terraform IaC for misconfigurations
    poetry run checkov --directory . --framework terraform --compact --quiet
@@ -1701,6 +2456,7 @@ poetry install
    **Expected output**: Summary of passed/failed checks with recommendations
 
 3. **Secrets Detection - Gitleaks**:
+
    ```bash
    # Install gitleaks (one-time setup)
    go install github.com/gitleaks/gitleaks/v8@latest
@@ -1724,11 +2480,13 @@ poetry run checkov --directory . --framework terraform --compact --quiet
 **Option 3: Run comprehensive security validation**
 
 If a `local-devsecops.sh` script exists in your project:
+
 ```bash
 ./local-devsecops.sh
 ```
 
 **Note**: This script is mentioned in the project skeleton but not yet implemented. You can create it with:
+
 ```bash
 cat > local-devsecops.sh <<'EOF'
 #!/bin/bash
@@ -1764,16 +2522,19 @@ The project constitution (§7) defines blocking thresholds:
 #### Common Issues and Fixes
 
 **Semgrep Errors**:
+
 - `Hardcoded credentials` → Move to environment variables or secret management
 - `SQL injection risk` → Use parameterized queries
 - `Insecure random` → Use cryptographically secure random generators
 
 **Checkov Errors**:
+
 - `CKV_GCP_X: Resource without labels` → Add required resource tags (see constitution §4)
 - `CKV_GCP_X: Encryption not enabled` → Enable encryption at rest
 - `CKV_GCP_X: Logging not enabled` → Add audit logging configuration
 
 **Gitleaks Errors**:
+
 - If secrets are detected → Remove from code, add to `.gitignore`, use environment variables
 - If false positive → Add to `.gitleaksignore` file with justification
 
@@ -1786,22 +2547,267 @@ The project constitution (§7) defines blocking thresholds:
 
 ### Pre-commit Hooks
 
-Before committing any changes, it is mandatory to run the pre-commit hooks to ensure code quality, formatting, and documentation are up to date.
+Pre-commit hooks automatically run security and quality checks before each commit, mirroring the CI pipeline gates to provide fast local feedback. These hooks catch issues early, before they reach the CI pipeline.
 
-1.  **Install pre-commit** (via Poetry):
+**What pre-commit hooks check**:
+
+- ✅ Code formatting (OpenTofu, Python, Go, Markdown, YAML)
+- ✅ Secrets scanning (gitleaks)
+- ✅ IaC compliance (checkov - CIS benchmarks)
+- ✅ Security vulnerabilities (semgrep SAST)
+- ✅ OpenTofu validation and linting (tflint)
+- ✅ Conventional commit message format
+- ✅ File quality (trailing spaces, newlines, large files)
+
+#### Prerequisites
+
+Before installing pre-commit hooks, ensure you have the following tools installed:
+
+```bash
+# 1. Verify Python 3.12+ and Poetry are installed
+python --version  # Should be 3.12 or higher
+poetry --version
+
+# 2. Install TFLint (for OpenTofu/Terraform linting)
+# macOS:
+brew install tflint
+
+# Linux:
+curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+# Windows (WSL):
+curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+# 3. Install gitleaks (for secrets scanning)
+# macOS:
+brew install gitleaks
+
+# Linux/WSL:
+wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz
+tar -xzf gitleaks_8.18.2_linux_x64.tar.gz
+sudo mv gitleaks /usr/local/bin/
+
+# Or via Go:
+go install github.com/gitleaks/gitleaks/v8@latest
+
+# 4. Verify installations
+tflint --version
+gitleaks version
+```
+
+#### Installation Steps
+
+1. **Install project dependencies** (includes pre-commit framework):
+
     ```bash
     poetry install
     ```
 
-2.  **Install the hooks**:
+2. **Install pre-commit hooks into Git**:
+
     ```bash
-    poetry run pre-commit install
+    # Install both pre-commit and commit-msg hooks
+    poetry run pre-commit install --install-hooks --hook-type pre-commit --hook-type commit-msg
     ```
 
-3.  **Run the hooks**: The hooks will run automatically on `git commit`. You can also run them manually at any time:
+    **Expected output**:
+
+    ```
+    pre-commit installed at .git/hooks/pre-commit
+    pre-commit installed at .git/hooks/commit-msg
+    [INFO] Installing environment for https://github.com/pre-commit/pre-commit-hooks.
+    [INFO] Installing environment for https://github.com/gitleaks/gitleaks.
+    ... (multiple hook installations)
+    [INFO] Installation complete.
+    ```
+
+    **Note**: The first installation downloads and installs all hook dependencies. This may take 5-10 minutes.
+
+3. **Initialize TFLint plugins**:
+
     ```bash
+    # Download TFLint plugins (Terraform and GCP rulesets)
+    tflint --init
+    ```
+
+    **Expected output**:
+
+    ```
+    Installing "terraform" plugin...
+    Installing "google" plugin...
+    Installed "terraform" (source: github.com/terraform-linters/tflint-ruleset-terraform, version: 0.5.0)
+    Installed "google" (source: github.com/terraform-linters/tflint-ruleset-google, version: 0.27.1)
+    ```
+
+4. **Verify installation** (first run will be slow):
+
+    ```bash
+    # Test hooks on all files (downloads hook environments on first run)
     poetry run pre-commit run --all-files
     ```
+
+    **First run**: Takes 5-10 minutes as it downloads and caches all hook dependencies.
+
+    **Subsequent runs**: Much faster (< 1 minute for typical changes).
+
+#### Usage
+
+**Automatic execution** (recommended):
+
+Hooks run automatically on every `git commit`:
+
+```bash
+# Make changes
+vim main.tf
+
+# Stage changes
+git add main.tf
+
+# Commit (hooks run automatically before commit)
+git commit -m "feat: add WAF rate limiting rules"
+```
+
+**Hook execution flow**:
+
+```
+git commit
+  ├─ File quality checks (5s)
+  ├─ Secrets scan - gitleaks (10s)
+  ├─ OpenTofu format - tofu fmt (15s)
+  ├─ OpenTofu validate (20s)
+  ├─ OpenTofu lint - tflint (30s)
+  ├─ IaC compliance - checkov (45s)
+  ├─ SAST - semgrep (45s)
+  ├─ Python/Go formatting (10s)
+  ├─ Markdown/YAML linting (5s)
+  └─ Conventional commit check (1s)
+
+  ✅ All hooks passed → Commit succeeds
+  ❌ Any hook failed → Commit blocked, fix issues and retry
+```
+
+**Manual execution**:
+
+Run hooks without committing:
+
+```bash
+# Run all hooks on all files
+poetry run pre-commit run --all-files
+
+# Run all hooks on staged files only
+poetry run pre-commit run
+
+# Run specific hook
+poetry run pre-commit run terraform_fmt --all-files
+poetry run pre-commit run gitleaks --all-files
+poetry run pre-commit run checkov --all-files
+```
+
+**Bypass hooks** (use sparingly):
+
+```bash
+# Skip hooks for work-in-progress commits (feature branches only)
+git commit --no-verify -m "wip: debugging firewall rules"
+
+# Or use shorthand
+git commit -n -m "wip: incomplete changes"
+```
+
+**⚠️ WARNING**:
+
+- Only bypass for WIP commits on feature branches
+- Never bypass secrets scanning (gitleaks)
+- Never bypass for commits to `main`, `nonprod`, or `prod` branches
+
+#### Configuration Files
+
+Pre-commit hooks use these configuration files (already created):
+
+| File | Purpose |
+|------|---------|
+| `.pre-commit-config.yaml` | Main hook configuration (30+ checks) |
+| `.tflint.hcl` | TFLint rules and GCP plugin configuration |
+| `.tflintignore` | Files/directories excluded from TFLint |
+| `.checkov.yaml` | Checkov IaC compliance rules (CIS benchmarks) |
+| `.markdownlint.yaml` | Markdown linting rules |
+| `.yamllint.yaml` | YAML linting rules |
+
+#### Troubleshooting
+
+**Error: `tflint: command not found`**
+
+```bash
+# Install TFLint (see Prerequisites section above)
+brew install tflint  # macOS
+# or
+curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash  # Linux/WSL
+```
+
+**Error: `gitleaks: command not found`**
+
+```bash
+# Install gitleaks (see Prerequisites section above)
+brew install gitleaks  # macOS
+# or
+go install github.com/gitleaks/gitleaks/v8@latest
+```
+
+**Error: `terraform_validate` fails**
+
+```bash
+# Initialize OpenTofu with backend disabled (for validation only)
+tofu init -backend=false
+
+# Retry hook
+poetry run pre-commit run terraform_validate --all-files
+```
+
+**Error: `terraform_tflint` fails with "Failed to initialize plugins"**
+
+```bash
+# Initialize TFLint plugins
+tflint --init
+
+# Retry hook
+poetry run pre-commit run terraform_tflint --all-files
+```
+
+**Hooks are too slow**:
+
+```bash
+# Option 1: Run only on changed files (default)
+git commit  # Only checks staged files
+
+# Option 2: Skip specific slow hooks temporarily
+SKIP=semgrep,terraform_checkov git commit -m "wip: fast commit"
+
+# Option 3: Bypass for WIP commits (feature branches only)
+git commit --no-verify -m "wip: debugging"
+```
+
+#### Updating Hooks
+
+Update hooks monthly to get latest security rules:
+
+```bash
+# Update to latest hook versions
+poetry run pre-commit autoupdate
+
+# Test updated hooks
+poetry run pre-commit run --all-files
+
+# Commit updates
+git add .pre-commit-config.yaml
+git commit -m "chore: update pre-commit hooks"
+```
+
+#### Additional Documentation
+
+For comprehensive setup instructions, troubleshooting, and best practices, see:
+
+- **[Pre-commit Setup Guide](docs/PRE_COMMIT_SETUP.md)** - Complete 50+ page guide
+- **Constitution §7** - DevSecOps gates and requirements
+- **CI/CD Section** (below) - How pre-commit mirrors CI pipeline
 
 ### Continuous Integration (CI)
 
@@ -1825,6 +2831,7 @@ The CI pipeline is defined in `.github/workflows/ci.yml` and runs automatically 
 1. **Code Checkout**: Fetch PR branch code
 2. **Dependency Installation**: Install Poetry, Go, OpenTofu, security tools
 3. **Parallel Job Execution**:
+
    ```
    ┌─────────────────┐
    │  ci-format-lint │  (tofu fmt, tflint)
@@ -1845,6 +2852,7 @@ The CI pipeline is defined in `.github/workflows/ci.yml` and runs automatically 
    │ build-and-scan-image │  (docker + trivy, if applicable)
    └──────────────────────┘
    ```
+
 4. **Artifact Generation**:
    - Threat modeling reports: `threat_modelling/reports/pr-threats.json`, `pr-threats.md`
    - SCA/SAST reports uploaded as GitHub Actions artifacts
@@ -1852,6 +2860,7 @@ The CI pipeline is defined in `.github/workflows/ci.yml` and runs automatically 
 5. **Status Check**: All jobs must pass for PR to be mergeable
 
 **Definition of Done for CI** (constitution §DoD):
+
 - ✅ All formatting/linting checks pass
 - ✅ No secrets detected in codebase
 - ✅ No CRITICAL SCA findings (or approved waiver attached)
@@ -1942,6 +2951,7 @@ The CD pipeline handles automated deployments to `nonprod` and `prod` environmen
 | **`cd-runtime-compliance`** | CIS benchmark tools | Validates runtime configuration against security baselines | Compliance failures block promotion | ~8 min |
 
 **Definition of Done for nonprod** (constitution §DoD):
+
 - ✅ Infrastructure successfully deployed to nonprod environment
 - ✅ All integration tests pass (Terratest BDD scenarios)
 - ✅ All smoke tests pass (critical paths validated)
@@ -2020,6 +3030,7 @@ The CD pipeline handles automated deployments to `nonprod` and `prod` environmen
 | **`cd-rollback`** | OpenTofu | Automatically reverts to "blue" tag if tests fail | Triggered on test failures | ~10 min |
 
 **Definition of Done for prod** (constitution §DoD):
+
 - ✅ Blue/green tags created successfully
 - ✅ "green" tag deployed to prod environment
 - ✅ Smoke tests pass in production
@@ -2033,6 +3044,7 @@ The CD pipeline handles automated deployments to `nonprod` and `prod` environmen
 If any post-deployment test fails in production:
 
 1. **Automated actions**:
+
    ```bash
    git tag -f green blue              # Point green back to blue (last known good)
    git push origin green --force      # Update green tag

@@ -58,3 +58,58 @@ output "firewall_rule_name" {
   description = "The name of the ingress VPC HTTPS firewall rule (for integration testing)"
   value       = var.enable_firewall ? module.firewall[0].firewall_rule_name : null
 }
+
+# VPC Network Outputs
+output "ingress_vpc_name" {
+  description = "The name of the ingress VPC network"
+  value       = var.enable_ingress_vpc ? module.ingress_vpc[0].ingress_vpc_name : null
+}
+
+output "ingress_vpc_id" {
+  description = "The ID of the ingress VPC network"
+  value       = var.enable_ingress_vpc ? module.ingress_vpc[0].ingress_vpc_id : null
+}
+
+output "egress_vpc_name" {
+  description = "The name of the egress VPC network"
+  value       = var.enable_egress_vpc ? module.egress_vpc[0].egress_vpc_name : null
+}
+
+output "egress_vpc_id" {
+  description = "The ID of the egress VPC network"
+  value       = var.enable_egress_vpc ? module.egress_vpc[0].egress_vpc_id : null
+}
+
+# WAF Outputs
+output "waf_policy_name" {
+  description = "The name of the Cloud Armor WAF policy"
+  value       = var.enable_waf ? module.waf[0].waf_policy_name : null
+}
+
+output "waf_policy_id" {
+  description = "The ID of the Cloud Armor WAF policy"
+  value       = var.enable_waf ? module.waf[0].waf_policy_id : null
+}
+
+# Backend Service Outputs
+output "demo_backend_service_name" {
+  description = "The name of the demo backend service"
+  value       = var.enable_demo_backend ? module.demo_backend[0].backend_service_name : null
+}
+
+output "cloud_run_service_name" {
+  description = "The name of the Cloud Run service"
+  value       = var.enable_demo_backend ? module.demo_backend[0].cloud_run_service_name : null
+}
+
+# CDN Outputs
+output "cdn_backend_name" {
+  description = "The name of the CDN backend bucket"
+  value       = var.enable_cdn ? module.cdn[0].cdn_backend_name : null
+}
+
+# Billing Outputs
+output "billing_budget_id" {
+  description = "The ID of the billing budget"
+  value       = var.enable_billing ? module.billing[0].budget_id : null
+}

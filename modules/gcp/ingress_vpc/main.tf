@@ -12,11 +12,3 @@ resource "google_compute_subnetwork" "ingress_subnet" {
   region                   = var.region
   private_ip_google_access = true # CIS GCP Foundation Benchmark 3.9 - Enable Private Google Access
 }
-
-output "ingress_vpc_name" {
-  value = google_compute_network.ingress_vpc.name
-}
-
-output "ingress_vpc_self_link" {
-  value = google_compute_network.ingress_vpc.self_link
-}

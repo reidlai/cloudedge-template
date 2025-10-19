@@ -17,7 +17,3 @@ resource "google_compute_security_policy" "waf_policy" {
 
   labels = var.resource_tags
 }
-
-output "waf_policy_name" {
-  value = google_compute_security_policy.waf_policy.name
-}
