@@ -345,12 +345,14 @@ jobs:
           fi
 
   # ============================================================================
-  # Job 5: OpenTofu Validation & Plan
+  # Job 5: OpenTofu Plan
+  # Note: Format/validate checks are handled by pre-commit hooks in Job 1
   # ============================================================================
-  terraform-validate:
-    name: OpenTofu Validation
+  terraform-plan:
+    name: OpenTofu Plan
     runs-on: ubuntu-latest
     needs: scan-and-build
+    if: github.event_name == 'pull_request'
 
     steps:
       - name: Checkout code
@@ -359,26 +361,17 @@ jobs:
       - name: Install OpenTofu
         uses: opentofu/setup-opentofu@v1
         with:
-          tofu_version: '1.6.0'
-
-      - name: OpenTofu Format Check
-        run: tofu fmt -check -recursive
+          tofu_version: ${{ env.TOFU_VERSION }}
 
       - name: OpenTofu Init
         run: tofu init -backend=false
 
-      - name: OpenTofu Validate
-        run: tofu validate
-
       - name: OpenTofu Plan
-        if: github.event_name == 'pull_request'
-        run: |
-          tofu plan -out=plan.tfplan
+        run: tofu plan -out=plan.tfplan
         env:
           TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Upload plan
-        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: tofu-plan
@@ -391,7 +384,7 @@ jobs:
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [scan-and-build, threat-modeling, threat-gate, terraform-validate]
+    needs: [scan-and-build, threat-modeling, threat-gate, terraform-plan]
     if: always()
 
     steps:
@@ -426,18 +419,20 @@ jobs:
             echo " **Threat gate**: Skipped" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Terraform
-          if [ "${{ needs.terraform-validate.result }}" == "success" ]; then
-            echo " **OpenTofu validation**: Passed" >> $GITHUB_STEP_SUMMARY
+          # OpenTofu Plan
+          if [ "${{ needs.terraform-plan.result }}" == "success" ]; then
+            echo " **OpenTofu plan**: Generated" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.terraform-plan.result }}" == "skipped" ]; then
+            echo " **OpenTofu plan**: Skipped (not a PR)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "L **OpenTofu validation**: Failed" >> $GITHUB_STEP_SUMMARY
+            echo "L **OpenTofu plan**: Failed" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Overall status
         run: |
           if [ "${{ needs.scan-and-build.result }}" != "success" ] || \
              [ "${{ needs.threat-gate.result }}" == "failure" ] || \
-             [ "${{ needs.terraform-validate.result }}" != "success" ]; then
+             ([ "${{ needs.terraform-plan.result }}" == "failure" ]); then
             echo "::error::CI pipeline failed - check individual job results"
             exit 1
           fi
