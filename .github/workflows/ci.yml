@@ -128,7 +128,7 @@ jobs:
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "� No threat model found - skipping analysis"
+            echo " No threat model found - skipping analysis"
           fi
 
       - name: Generate threat model reports
@@ -145,7 +145,7 @@ jobs:
           RISKS_JSON="threat_modelling/reports/risks.json"
 
           if [ ! -f "$RISKS_JSON" ]; then
-            echo "� No risks.json found - Threagile may have failed"
+            echo " No risks.json found - Threagile may have failed"
             echo "critical_count=0" >> $GITHUB_OUTPUT
             echo "elevated_count=0" >> $GITHUB_OUTPUT
             echo "untracked_critical=0" >> $GITHUB_OUTPUT
@@ -222,9 +222,9 @@ jobs:
       - name: Create PR comment body
         id: comment
         run: |
-          COMMENT="## =� Security & Threat Analysis\n\n"
+          COMMENT="## = Security & Threat Analysis\n\n"
           COMMENT+="### Pre-commit Checks\n"
-          COMMENT+=" All pre-commit hooks passed\n\n"
+          COMMENT+=" All pre-commit hooks passed\n\n"
           COMMENT+="### Threat Modeling\n"
           COMMENT+="${{ needs.threat-modeling.outputs.risk_summary }}\n\n"
 
@@ -232,7 +232,7 @@ jobs:
           UNTRACKED_ELEVATED="${{ needs.threat-modeling.outputs.untracked_elevated }}"
 
           if [ "$UNTRACKED_CRITICAL" -gt 0 ] || [ "$UNTRACKED_ELEVATED" -gt 0 ]; then
-            COMMENT+="### � Action Required\n\n"
+            COMMENT+="###  Action Required\n\n"
             COMMENT+="**$UNTRACKED_CRITICAL critical** and **$UNTRACKED_ELEVATED elevated** risk(s) are untracked.\n\n"
 
             if [ -f "untracked_risks.md" ]; then
@@ -248,7 +248,7 @@ jobs:
             COMMENT+="- Add label: \`po-approved\` to bypass this check\n"
             COMMENT+="- Document acceptance rationale in PR description\n"
           else
-            COMMENT+=" All critical and elevated risks are tracked!\n"
+            COMMENT+=" All critical and elevated risks are tracked!\n"
           fi
 
           COMMENT+="\n---\n"
@@ -263,7 +263,7 @@ jobs:
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: 'github-actions[bot]'
-          body-includes: '=� Security & Threat Analysis'
+          body-includes: '= Security & Threat Analysis'
 
       - name: Create or update PR comment
         uses: peter-evans/create-or-update-comment@v4
@@ -307,7 +307,7 @@ jobs:
             core.setOutput('po_approved', hasPoApproval);
 
             if (hasPoApproval) {
-              core.info(' PO approval label found - bypassing threat gate');
+              core.info(' PO approval label found - bypassing threat gate');
             } else {
               core.warning('L No PO approval - threat gate will block PR');
             }
@@ -335,7 +335,7 @@ jobs:
       - name: Success - Threat gate passed
         if: steps.check_risks.outputs.has_untracked != 'true' || steps.check_po.outputs.po_approved == 'true'
         run: |
-          echo " Threat model gate passed"
+          echo " Threat model gate passed"
           if [ "${{ steps.check_po.outputs.po_approved }}" == "true" ]; then
             echo "  � PO approval granted for risk acceptance"
           else
@@ -400,33 +400,33 @@ jobs:
 
           # Pre-commit
           if [ "${{ needs.scan-and-build.result }}" == "success" ]; then
-            echo " **Pre-commit hooks**: Passed" >> $GITHUB_STEP_SUMMARY
+            echo " **Pre-commit hooks**: Passed" >> $GITHUB_STEP_SUMMARY
           else
             echo "L **Pre-commit hooks**: Failed" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Threat modeling
           if [ "${{ needs.threat-modeling.result }}" == "success" ]; then
-            echo " **Threat modeling**: Completed" >> $GITHUB_STEP_SUMMARY
+            echo " **Threat modeling**: Completed" >> $GITHUB_STEP_SUMMARY
             echo "  - Total risks: ${{ needs.threat-modeling.outputs.total_risks }}" >> $GITHUB_STEP_SUMMARY
             echo "  - Critical: ${{ needs.threat-modeling.outputs.critical_count }}" >> $GITHUB_STEP_SUMMARY
             echo "  - Elevated: ${{ needs.threat-modeling.outputs.elevated_count }}" >> $GITHUB_STEP_SUMMARY
           else
-            echo "� **Threat modeling**: Skipped or failed" >> $GITHUB_STEP_SUMMARY
+            echo " **Threat modeling**: Skipped or failed" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Threat gate
           if [ "${{ needs.threat-gate.result }}" == "success" ]; then
-            echo " **Threat gate**: Passed" >> $GITHUB_STEP_SUMMARY
+            echo " **Threat gate**: Passed" >> $GITHUB_STEP_SUMMARY
           elif [ "${{ needs.threat-gate.result }}" == "failure" ]; then
             echo "L **Threat gate**: Blocked (untracked risks)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "� **Threat gate**: Skipped" >> $GITHUB_STEP_SUMMARY
+            echo " **Threat gate**: Skipped" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Terraform
           if [ "${{ needs.terraform-validate.result }}" == "success" ]; then
-            echo " **OpenTofu validation**: Passed" >> $GITHUB_STEP_SUMMARY
+            echo " **OpenTofu validation**: Passed" >> $GITHUB_STEP_SUMMARY
           else
             echo "L **OpenTofu validation**: Failed" >> $GITHUB_STEP_SUMMARY
           fi
@@ -439,4 +439,4 @@ jobs:
             echo "::error::CI pipeline failed - check individual job results"
             exit 1
           fi
-          echo " All CI checks passed!"
+          echo " All CI checks passed!"
