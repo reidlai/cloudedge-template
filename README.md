@@ -3122,7 +3122,7 @@ If any post-deployment test fails in production:
 - `.github/workflows/ci.yml` - CI pipeline definition
 - `.github/workflows/cd-nonprod.yml` - nonprod deployment pipeline
 - `.github/workflows/cd-prod.yml` - prod deployment pipeline
-- `pre-commit-config.yaml` - Local pre-commit hooks (mirrors CI checks)
+- `.pre-commit-config.yaml` - Local pre-commit hooks (mirrors CI checks)
 
 **Environment Variables** (12-Factor configuration):
 
