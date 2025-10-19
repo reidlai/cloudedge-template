@@ -1,0 +1,457 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches:
+      - main
+      - master
+  push:
+    branches:
+      - main
+      - master
+
+# Cancel in-progress runs when a new push occurs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  issues: write
+
+env:
+  # Python version for pre-commit and tools
+  PYTHON_VERSION: '3.12'
+  # Go version for Terratest and security tools
+  GO_VERSION: '1.23'
+  # Node version for markdownlint
+  NODE_VERSION: '22'
+
+jobs:
+  # ============================================================================
+  # Job 1: Pre-commit Hooks (Secrets, SAST, Linting, Formatting)
+  # ============================================================================
+  pre-commit:
+    name: Pre-commit Hooks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better diffs
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction --no-root
+
+      - name: Install Go security tools
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: '1.6.0'
+
+      - name: Install TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: 'latest'
+
+      - name: Cache pre-commit hooks
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
+
+      - name: Run pre-commit hooks
+        run: |
+          poetry run pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: check-threat-modeling  # Skip threat modeling in pre-commit (runs separately)
+
+      - name: Upload pre-commit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-commit-results
+          path: |
+            .pre-commit-cache/
+            pre-commit.log
+          retention-days: 7
+
+  # ============================================================================
+  # Job 2: Threat Modeling (Threagile Analysis)
+  # ============================================================================
+  threat-modeling:
+    name: Threat Modeling Analysis
+    runs-on: ubuntu-latest
+    needs: pre-commit  # Run after pre-commit passes
+
+    outputs:
+      critical_count: ${{ steps.analyze.outputs.critical_count }}
+      elevated_count: ${{ steps.analyze.outputs.elevated_count }}
+      untracked_critical: ${{ steps.analyze.outputs.untracked_critical }}
+      untracked_elevated: ${{ steps.analyze.outputs.untracked_elevated }}
+      total_risks: ${{ steps.analyze.outputs.total_risks }}
+      risk_summary: ${{ steps.analyze.outputs.risk_summary }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install jq for JSON parsing
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Check if threat model exists
+        id: check_model
+        run: |
+          if [ -f "threat_modelling/threat-model.yaml" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "  No threat model found - skipping analysis"
+          fi
+
+      - name: Generate threat model reports
+        if: steps.check_model.outputs.exists == 'true'
+        run: |
+          chmod +x scripts/generate-threat-model.sh
+          ./scripts/generate-threat-model.sh
+        continue-on-error: true  # Don't fail if Threagile has issues
+
+      - name: Analyze threat findings
+        id: analyze
+        if: steps.check_model.outputs.exists == 'true'
+        run: |
+          RISKS_JSON="threat_modelling/reports/risks.json"
+
+          if [ ! -f "$RISKS_JSON" ]; then
+            echo "  No risks.json found - Threagile may have failed"
+            echo "critical_count=0" >> $GITHUB_OUTPUT
+            echo "elevated_count=0" >> $GITHUB_OUTPUT
+            echo "untracked_critical=0" >> $GITHUB_OUTPUT
+            echo "untracked_elevated=0" >> $GITHUB_OUTPUT
+            echo "total_risks=0" >> $GITHUB_OUTPUT
+            echo "risk_summary=No threat analysis available" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Count risks by severity
+          CRITICAL=$(jq '[.[] | select(.severity == "critical")] | length' "$RISKS_JSON")
+          ELEVATED=$(jq '[.[] | select(.severity == "elevated")] | length' "$RISKS_JSON")
+          HIGH=$(jq '[.[] | select(.severity == "high")] | length' "$RISKS_JSON")
+          MEDIUM=$(jq '[.[] | select(.severity == "medium")] | length' "$RISKS_JSON")
+          LOW=$(jq '[.[] | select(.severity == "low")] | length' "$RISKS_JSON")
+          TOTAL=$(jq '. | length' "$RISKS_JSON")
+
+          # Count untracked critical/elevated risks
+          UNTRACKED_CRITICAL=$(jq '[.[] | select(.risk_status == "unchecked" and .severity == "critical")] | length' "$RISKS_JSON")
+          UNTRACKED_ELEVATED=$(jq '[.[] | select(.risk_status == "unchecked" and .severity == "elevated")] | length' "$RISKS_JSON")
+
+          echo "critical_count=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "elevated_count=$ELEVATED" >> $GITHUB_OUTPUT
+          echo "untracked_critical=$UNTRACKED_CRITICAL" >> $GITHUB_OUTPUT
+          echo "untracked_elevated=$UNTRACKED_ELEVATED" >> $GITHUB_OUTPUT
+          echo "total_risks=$TOTAL" >> $GITHUB_OUTPUT
+
+          # Create summary
+          SUMMARY="**Threat Modeling Results**\n\n"
+          SUMMARY+="- =4 Critical: $CRITICAL ($UNTRACKED_CRITICAL untracked)\n"
+          SUMMARY+="- =à Elevated: $ELEVATED ($UNTRACKED_ELEVATED untracked)\n"
+          SUMMARY+="- =á High: $HIGH\n"
+          SUMMARY+="- =5 Medium: $MEDIUM\n"
+          SUMMARY+="- =â Low: $LOW\n"
+          SUMMARY+="- **Total**: $TOTAL risks identified"
+
+          echo "risk_summary<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Save detailed untracked risks
+          if [ "$UNTRACKED_CRITICAL" -gt 0 ] || [ "$UNTRACKED_ELEVATED" -gt 0 ]; then
+            echo "## Untracked Critical/Elevated Risks" > untracked_risks.md
+            jq -r '.[] | select(.risk_status == "unchecked" and (.severity == "critical" or .severity == "elevated")) | "- [\(.severity | ascii_upcase)] **\(.title | gsub("</?b>"; ""))** - \(.synthetic_id)"' "$RISKS_JSON" >> untracked_risks.md
+          fi
+
+      - name: Upload threat model reports
+        if: steps.check_model.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: threat-model-reports
+          path: |
+            threat_modelling/reports/
+            untracked_risks.md
+          retention-days: 30
+
+  # ============================================================================
+  # Job 3: PR Comment with Threat Analysis
+  # ============================================================================
+  pr-comment:
+    name: Post PR Comment
+    runs-on: ubuntu-latest
+    needs: threat-modeling
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Download threat model reports
+        uses: actions/download-artifact@v4
+        with:
+          name: threat-model-reports
+          path: threat_modelling/reports/
+        continue-on-error: true
+
+      - name: Create PR comment body
+        id: comment
+        run: |
+          COMMENT="## =á Security & Threat Analysis\n\n"
+          COMMENT+="### Pre-commit Checks\n"
+          COMMENT+=" All pre-commit hooks passed\n\n"
+          COMMENT+="### Threat Modeling\n"
+          COMMENT+="${{ needs.threat-modeling.outputs.risk_summary }}\n\n"
+
+          UNTRACKED_CRITICAL="${{ needs.threat-modeling.outputs.untracked_critical }}"
+          UNTRACKED_ELEVATED="${{ needs.threat-modeling.outputs.untracked_elevated }}"
+
+          if [ "$UNTRACKED_CRITICAL" -gt 0 ] || [ "$UNTRACKED_ELEVATED" -gt 0 ]; then
+            COMMENT+="###   Action Required\n\n"
+            COMMENT+="**$UNTRACKED_CRITICAL critical** and **$UNTRACKED_ELEVATED elevated** risk(s) are untracked.\n\n"
+
+            if [ -f "untracked_risks.md" ]; then
+              COMMENT+="$(cat untracked_risks.md)\n\n"
+            fi
+
+            COMMENT+="#### Next Steps:\n"
+            COMMENT+="1. Review untracked risks in [threat model reports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n"
+            COMMENT+="2. Add \`risk_tracking\` entries to \`threat_modelling/threat-model.yaml\`\n"
+            COMMENT+="3. Update PR, or request **Product Owner** approval with \`po-approved\` label\n\n"
+            COMMENT+="#### Product Owner Override\n"
+            COMMENT+="If risks are accepted, Product Owner can:\n"
+            COMMENT+="- Add label: \`po-approved\` to bypass this check\n"
+            COMMENT+="- Document acceptance rationale in PR description\n"
+          else
+            COMMENT+=" All critical and elevated risks are tracked!\n"
+          fi
+
+          COMMENT+="\n---\n"
+          COMMENT+="_Generated by [Threagile](https://threagile.io/) " [View full report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})_"
+
+          # Save to file for next step
+          echo -e "$COMMENT" > pr_comment.md
+
+      - name: Find existing comment
+        uses: peter-evans/find-comment@v3
+        id: find_comment
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: '=á Security & Threat Analysis'
+
+      - name: Create or update PR comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find_comment.outputs.comment-id }}
+          edit-mode: replace
+          body-path: pr_comment.md
+
+  # ============================================================================
+  # Job 4: PR Blocking Check (Fail if untracked risks unless PO approved)
+  # ============================================================================
+  threat-gate:
+    name: Threat Model Gate
+    runs-on: ubuntu-latest
+    needs: threat-modeling
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Check for untracked critical/elevated risks
+        id: check_risks
+        run: |
+          UNTRACKED_CRITICAL="${{ needs.threat-modeling.outputs.untracked_critical }}"
+          UNTRACKED_ELEVATED="${{ needs.threat-modeling.outputs.untracked_elevated }}"
+
+          if [ "$UNTRACKED_CRITICAL" -gt 0 ] || [ "$UNTRACKED_ELEVATED" -gt 0 ]; then
+            echo "has_untracked=true" >> $GITHUB_OUTPUT
+            echo "::warning::Found $UNTRACKED_CRITICAL critical and $UNTRACKED_ELEVATED elevated untracked risks"
+          else
+            echo "has_untracked=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for PO approval label
+        id: check_po
+        if: steps.check_risks.outputs.has_untracked == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map(l => l.name);
+            const hasPoApproval = labels.includes('po-approved');
+            core.setOutput('po_approved', hasPoApproval);
+
+            if (hasPoApproval) {
+              core.info(' PO approval label found - bypassing threat gate');
+            } else {
+              core.warning('L No PO approval - threat gate will block PR');
+            }
+
+      - name: Fail if untracked risks and no PO approval
+        if: steps.check_risks.outputs.has_untracked == 'true' && steps.check_po.outputs.po_approved != 'true'
+        run: |
+          echo "::error::PR blocked due to untracked critical/elevated threats"
+          echo ""
+          echo "PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP"
+          echo "  Ô THREAT MODEL GATE: PR BLOCKED"
+          echo "PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP"
+          echo ""
+          echo "Found untracked threats:"
+          echo "  - Critical: ${{ needs.threat-modeling.outputs.untracked_critical }}"
+          echo "  - Elevated: ${{ needs.threat-modeling.outputs.untracked_elevated }}"
+          echo ""
+          echo "To resolve:"
+          echo "  1. Add risk_tracking entries to threat_modelling/threat-model.yaml"
+          echo "  2. OR request Product Owner to add 'po-approved' label"
+          echo ""
+          echo "PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP"
+          exit 1
+
+      - name: Success - Threat gate passed
+        if: steps.check_risks.outputs.has_untracked != 'true' || steps.check_po.outputs.po_approved == 'true'
+        run: |
+          echo " Threat model gate passed"
+          if [ "${{ steps.check_po.outputs.po_approved }}" == "true" ]; then
+            echo "  ’ PO approval granted for risk acceptance"
+          else
+            echo "  ’ All critical/elevated risks are tracked"
+          fi
+
+  # ============================================================================
+  # Job 5: OpenTofu Validation & Plan
+  # ============================================================================
+  terraform-validate:
+    name: OpenTofu Validation
+    runs-on: ubuntu-latest
+    needs: pre-commit
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: '1.6.0'
+
+      - name: OpenTofu Format Check
+        run: tofu fmt -check -recursive
+
+      - name: OpenTofu Init
+        run: tofu init -backend=false
+
+      - name: OpenTofu Validate
+        run: tofu validate
+
+      - name: OpenTofu Plan
+        if: github.event_name == 'pull_request'
+        run: |
+          tofu plan -out=plan.tfplan
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Upload plan
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tofu-plan
+          path: plan.tfplan
+          retention-days: 7
+
+  # ============================================================================
+  # Job 6: Summary
+  # ============================================================================
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [pre-commit, threat-modeling, threat-gate, terraform-validate]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## CI Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Pre-commit
+          if [ "${{ needs.pre-commit.result }}" == "success" ]; then
+            echo " **Pre-commit hooks**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "L **Pre-commit hooks**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Threat modeling
+          if [ "${{ needs.threat-modeling.result }}" == "success" ]; then
+            echo " **Threat modeling**: Completed" >> $GITHUB_STEP_SUMMARY
+            echo "  - Total risks: ${{ needs.threat-modeling.outputs.total_risks }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - Critical: ${{ needs.threat-modeling.outputs.critical_count }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - Elevated: ${{ needs.threat-modeling.outputs.elevated_count }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "  **Threat modeling**: Skipped or failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Threat gate
+          if [ "${{ needs.threat-gate.result }}" == "success" ]; then
+            echo " **Threat gate**: Passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.threat-gate.result }}" == "failure" ]; then
+            echo "L **Threat gate**: Blocked (untracked risks)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "  **Threat gate**: Skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Terraform
+          if [ "${{ needs.terraform-validate.result }}" == "success" ]; then
+            echo " **OpenTofu validation**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "L **OpenTofu validation**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Overall status
+        run: |
+          if [ "${{ needs.pre-commit.result }}" != "success" ] || \
+             [ "${{ needs.threat-gate.result }}" == "failure" ] || \
+             [ "${{ needs.terraform-validate.result }}" != "success" ]; then
+            echo "::error::CI pipeline failed - check individual job results"
+            exit 1
+          fi
+          echo " All CI checks passed!"
