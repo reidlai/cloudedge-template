@@ -2,7 +2,7 @@
 # Note: Uses Serverless NEG for Load Balancer connectivity (no VPC Connector needed)
 resource "google_cloud_run_v2_service" "demo_api" {
   project  = var.project_id
-  name     = "${var.environment}-demo-api"
+  name     = "${var.project_suffix}-demo-api"
   location = var.region
 
   template {
@@ -30,7 +30,7 @@ resource "google_cloud_run_v2_service" "demo_api" {
 # via Google's internal networking infrastructure
 resource "google_compute_region_network_endpoint_group" "serverless_neg" {
   project               = var.project_id
-  name                  = "${var.environment}-serverless-neg"
+  name                  = "${var.project_suffix}-demo-api-neg"
   region                = var.region
   network_endpoint_type = "SERVERLESS"
   cloud_run {
@@ -40,7 +40,7 @@ resource "google_compute_region_network_endpoint_group" "serverless_neg" {
 
 resource "google_compute_backend_service" "demo_backend" {
   project   = var.project_id
-  name      = "${var.environment}-demo-api-backend"
+  name      = "${var.project_suffix}-demo-api-backend"
   protocol  = "HTTP"
   port_name = "http"
   backend {
@@ -66,7 +66,7 @@ resource "google_compute_backend_service" "demo_backend" {
 resource "google_logging_project_sink" "backend_service_logs" {
   count       = var.enable_logging_bucket ? 1 : 0
   project     = var.project_id
-  name        = "${var.environment}-demo-backend-logs-sink"
+  name        = "${var.project_suffix}-demo-backend-logs-sink"
   destination = "logging.googleapis.com/projects/${var.project_id}/locations/global/buckets/${google_logging_project_bucket_config.backend_logs_bucket[0].id}"
   filter      = "resource.type=\"http_load_balancer\" AND resource.labels.backend_service_name=\"${google_compute_backend_service.demo_backend.name}\""
 }
@@ -76,7 +76,7 @@ resource "google_logging_project_bucket_config" "backend_logs_bucket" {
   project        = var.project_id
   location       = "global"
   retention_days = 30 # NFR-001: 30-day trace data retention
-  bucket_id      = "${var.environment}-demo-backend-logs"
+  bucket_id      = "${var.project_suffix}-demo-backend-logs"
   description    = "30-day retention bucket for demo backend service logs (NFR-001 compliance)"
 
   # Note: lifecycle_state is managed by the provider and cannot be configured

@@ -1,6 +1,6 @@
 resource "google_compute_firewall" "allow_https" {
   project = var.project_id
-  name    = "${var.environment}-allow-https"
+  name    = "${var.project_suffix}-allow-https"
   network = var.network_name
 
   allow {

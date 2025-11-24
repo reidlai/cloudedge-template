@@ -1,6 +1,6 @@
 resource "google_compute_security_policy" "waf_policy" {
   project     = var.project_id
-  name        = "${var.environment}-waf-policy"
+  name        = "${var.project_suffix}-waf-policy"
   description = "WAF policy"
 
   rule {

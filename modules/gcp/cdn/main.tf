@@ -1,6 +1,6 @@
 resource "google_compute_backend_bucket" "cdn_backend" {
   project     = var.project_id
-  name        = "${var.environment}-cdn-backend"
+  name        = "${var.project_suffix}-cdn-backend"
   bucket_name = var.bucket_name
   enable_cdn  = true
 

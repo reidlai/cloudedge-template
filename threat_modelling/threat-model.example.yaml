@@ -450,7 +450,7 @@ shared_runtimes:
 # Individual Risk Categories
 # ============================================================================
 individual_risk_categories:
-  # You can add custom risk categories here if needed
+# You can add custom risk categories here if needed
   # Example:
   # supply-chain-attack:
   #   id: supply-chain-attack
@@ -482,7 +482,7 @@ individual_risk_categories:
 # Risk Tracking & Questions
 # ============================================================================
 questions:
-  # Uncomment and answer these to improve threat model accuracy
+# Uncomment and answer these to improve threat model accuracy
   # - How are Cloud Run container images scanned for vulnerabilities?
   # - What secrets management solution is used (GCP Secret Manager)?
   # - Are VPC Service Controls enabled for data exfiltration prevention?
@@ -490,13 +490,13 @@ questions:
   # - What monitoring/alerting exists for suspicious traffic patterns?
 
 abuse_cases:
-  # Document known abuse scenarios
+# Document known abuse scenarios
   # - DDoS attack on load balancer (mitigated by Cloud Armor rate limiting)
   # - SQL injection via API endpoints (mitigated by WAF rules)
   # - Data exfiltration from Cloud Run (mitigated by egress VPC controls)
 
 security_controls:
-  # List implemented security controls
+# List implemented security controls
   # - WAF (Cloud Armor with OWASP Top 10 rules)
   # - TLS 1.3 encryption in transit
   # - IAM-based authentication for Cloud Run

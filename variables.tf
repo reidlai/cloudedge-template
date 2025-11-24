@@ -4,14 +4,17 @@ variable "cloud_provider" {
   default     = "gcp"
 }
 
-variable "environment" {
-  description = "The deployment environment (e.g., 'nonprod', 'prod')."
+variable "project_suffix" {
+  description = "Project suffix (nonprod or prod). Combined with cloudedge_github_repository to form project_id."
   type        = string
-  default     = "nonprod"
+  validation {
+    condition     = contains(["nonprod", "prod"], var.project_suffix)
+    error_message = "project_suffix must be 'nonprod' or 'prod'."
+  }
 }
 
-variable "project_id" {
-  description = "The GCP Project ID where resources will be deployed."
+variable "cloudedge_github_repository" {
+  description = "The GitHub repository name for the Cloud Edge project (e.g., 'vibetics-cloudedge')."
   type        = string
 }
 
@@ -44,20 +47,20 @@ variable "max_concurrent_deployments" {
 }
 
 variable "resource_tags" {
-  description = "A map of tags to apply to all resources. 'environment' and 'managed-by' are mandatory."
+  description = "A map of tags to apply to all resources. 'project-suffix' and 'managed-by' are mandatory."
   type        = map(string)
 
   validation {
     condition = (
-      contains(keys(var.resource_tags), "environment") &&
+      contains(keys(var.resource_tags), "project-suffix") &&
       contains(keys(var.resource_tags), "managed-by")
     )
-    error_message = "resource_tags must contain 'environment' and 'managed-by' keys for compliance with FR-007."
+    error_message = "resource_tags must contain 'project-suffix' and 'managed-by' keys for compliance with FR-007."
   }
 
   default = {
-    "managed-by"  = "opentofu"
-    "environment" = "nonprod"
+    "managed-by"     = "opentofu"
+    "project-suffix" = "nonprod"
   }
 }
 

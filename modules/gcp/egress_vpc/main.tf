@@ -1,12 +1,12 @@
 resource "google_compute_network" "egress_vpc" {
   project                 = var.project_id
-  name                    = "${var.environment}-egress-vpc"
+  name                    = "${var.project_suffix}-egress-vpc"
   auto_create_subnetworks = false
 }
 
 resource "google_compute_subnetwork" "egress_subnet" {
   project                  = var.project_id
-  name                     = "${var.environment}-egress-subnet"
+  name                     = "${var.project_suffix}-egress-subnet"
   ip_cidr_range            = var.cidr_range
   network                  = google_compute_network.egress_vpc.name
   region                   = var.region
