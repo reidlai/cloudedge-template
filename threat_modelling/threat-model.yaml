@@ -518,7 +518,7 @@ shared_runtimes:
 # ============================================================================
 
 individual_risk_categories: {}
-  # Add custom risk categories here if needed beyond Threagile's 40+ built-in risk rules
+# Add custom risk categories here if needed beyond Threagile's 40+ built-in risk rules
   # See https://threagile.io/risk-rules/ for built-in coverage
 
 # ============================================================================

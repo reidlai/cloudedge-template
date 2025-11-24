@@ -34,7 +34,7 @@ hard-fail-on: CRITICAL,HIGH
 
 # Skip specific checks (use sparingly, document rationale)
 skip-check:
-  # Example: Skip check for specific resources
+# Example: Skip check for specific resources
   # - CKV_GCP_1  # GCP VM instances should not have public IP addresses
   #
   # NOTE: For production, remove all skips or add waiver documentation

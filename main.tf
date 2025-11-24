@@ -21,9 +21,16 @@ terraform {
   }
 }
 
+# --- Computed Values ---
+
+locals {
+  # Compute project_id from repository name and suffix
+  project_id = "${var.cloudedge_github_repository}-${var.project_suffix}"
+}
+
 # Configures the Google Cloud provider with the project and region.
 provider "google" {
-  project = var.project_id
+  project = local.project_id
   region  = var.region
 }
 
@@ -34,9 +41,9 @@ locals {
   standard_tags = merge(
     var.resource_tags,
     {
-      "environment" = var.environment
-      "project"     = var.project_id
-      "managed-by"  = "opentofu"
+      "project-suffix" = var.project_suffix
+      "project"        = local.project_id
+      "managed-by"     = "opentofu"
     }
   )
 }
@@ -47,45 +54,45 @@ locals {
 
 # Creates the Ingress VPC for all incoming public traffic.
 module "ingress_vpc" {
-  count         = var.enable_ingress_vpc ? 1 : 0
-  source        = "./modules/gcp/ingress_vpc"
-  project_id    = var.project_id
-  environment   = var.environment
-  region        = var.region
-  resource_tags = local.standard_tags
-  cidr_range    = var.ingress_vpc_cidr_range
+  count          = var.enable_ingress_vpc ? 1 : 0
+  source         = "./modules/gcp/ingress_vpc"
+  project_id     = local.project_id
+  project_suffix = var.project_suffix
+  region         = var.region
+  resource_tags  = local.standard_tags
+  cidr_range     = var.ingress_vpc_cidr_range
 }
 
 # Creates the Egress VPC for all outbound traffic from internal services.
 module "egress_vpc" {
-  count         = var.enable_egress_vpc ? 1 : 0
-  source        = "./modules/gcp/egress_vpc"
-  project_id    = var.project_id
-  environment   = var.environment
-  region        = var.region
-  resource_tags = local.standard_tags
-  cidr_range    = var.egress_vpc_cidr_range
+  count          = var.enable_egress_vpc ? 1 : 0
+  source         = "./modules/gcp/egress_vpc"
+  project_id     = local.project_id
+  project_suffix = var.project_suffix
+  region         = var.region
+  resource_tags  = local.standard_tags
+  cidr_range     = var.egress_vpc_cidr_range
 }
 
 # Applies baseline firewall rules to the Ingress VPC.
 module "firewall" {
-  count         = var.enable_firewall ? 1 : 0
-  source        = "./modules/gcp/firewall"
-  project_id    = var.project_id
-  environment   = var.environment
-  network_name  = module.ingress_vpc[0].ingress_vpc_name
-  resource_tags = local.standard_tags
+  count          = var.enable_firewall ? 1 : 0
+  source         = "./modules/gcp/firewall"
+  project_id     = local.project_id
+  project_suffix = var.project_suffix
+  network_name   = module.ingress_vpc[0].ingress_vpc_name
+  resource_tags  = local.standard_tags
 }
 
 # --- Edge Security & Load Balancing ---
 
 # Deploys the Google Cloud Armor WAF policy.
 module "waf" {
-  count         = var.enable_waf ? 1 : 0
-  source        = "./modules/gcp/waf"
-  project_id    = var.project_id
-  environment   = var.environment
-  resource_tags = local.standard_tags
+  count          = var.enable_waf ? 1 : 0
+  source         = "./modules/gcp/waf"
+  project_id     = local.project_id
+  project_suffix = var.project_suffix
+  resource_tags  = local.standard_tags
 }
 
 # --- CDN Configuration ---
@@ -93,8 +100,8 @@ module "waf" {
 # Creates a GCS bucket for static content delivery via CDN
 resource "google_storage_bucket" "cdn_content" {
   count    = var.enable_cdn ? 1 : 0
-  project  = var.project_id
-  name     = "${var.project_id}-${var.environment}-cdn-content"
+  project  = local.project_id
+  name     = "${local.project_id}-cdn-content"
   location = var.region
 
   uniform_bucket_level_access = true
@@ -111,27 +118,27 @@ resource "google_storage_bucket" "cdn_content" {
 
 # Deploys the CDN backend bucket
 module "cdn" {
-  count         = var.enable_cdn ? 1 : 0
-  source        = "./modules/gcp/cdn"
-  project_id    = var.project_id
-  environment   = var.environment
-  bucket_name   = google_storage_bucket.cdn_content[0].name
-  resource_tags = local.standard_tags
+  count          = var.enable_cdn ? 1 : 0
+  source         = "./modules/gcp/cdn"
+  project_id     = local.project_id
+  project_suffix = var.project_suffix
+  bucket_name    = google_storage_bucket.cdn_content[0].name
+  resource_tags  = local.standard_tags
 }
 
 # --- SSL Certificate Configuration ---
 
 module "self_signed_cert" {
-  count       = var.enable_self_signed_cert ? 1 : 0
-  source      = "./modules/gcp/self_signed_certificate"
-  project_id  = var.project_id
-  environment = var.environment
+  count          = var.enable_self_signed_cert ? 1 : 0
+  source         = "./modules/gcp/self_signed_certificate"
+  project_id     = local.project_id
+  project_suffix = var.project_suffix
 }
 
 resource "google_compute_managed_ssl_certificate" "managed_cert" {
   count   = var.enable_self_signed_cert ? 0 : 1
-  project = var.project_id
-  name    = "${var.environment}-managed-cert"
+  project = local.project_id
+  name    = "${var.project_suffix}-managed-cert"
   managed {
     domains = [var.managed_ssl_domain]
   }
@@ -151,8 +158,8 @@ locals {
 module "demo_backend" {
   count                 = var.enable_demo_backend ? 1 : 0
   source                = "./modules/gcp/demo_backend"
-  project_id            = var.project_id
-  environment           = var.environment
+  project_id            = local.project_id
+  project_suffix        = var.project_suffix
   region                = var.region
   resource_tags         = local.standard_tags
   demo_api_image        = var.demo_api_image
@@ -165,8 +172,8 @@ module "demo_backend" {
 module "dr_loadbalancer" {
   count              = var.enable_dr_loadbalancer ? 1 : 0
   source             = "./modules/gcp/dr_loadbalancer"
-  project_id         = var.project_id
-  environment        = var.environment
+  project_id         = local.project_id
+  project_suffix     = var.project_suffix
   resource_tags      = local.standard_tags
   default_service_id = module.demo_backend[0].backend_service_id
   ssl_certificates   = local.ssl_certificate_links
@@ -208,6 +215,6 @@ module "dr_loadbalancer" {
 module "billing" {
   count           = var.enable_billing ? 1 : 0
   source          = "./modules/gcp/billing"
-  project_id      = var.project_id
+  project_id      = local.project_id
   billing_account = var.billing_account
 }

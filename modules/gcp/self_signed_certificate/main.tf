@@ -29,7 +29,7 @@ resource "tls_self_signed_cert" "self_signed" {
 # Finally, upload the generated certificate to Google Cloud
 resource "google_compute_ssl_certificate" "self_signed" {
   project     = var.project_id
-  name        = "${var.environment}-self-signed-cert"
+  name        = "${var.project_suffix}-self-signed-cert"
   private_key = tls_private_key.self_signed.private_key_pem
   certificate = tls_self_signed_cert.self_signed.cert_pem
 

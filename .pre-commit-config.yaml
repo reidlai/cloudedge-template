@@ -362,7 +362,7 @@ repos:
         pass_filenames: false
         always_run: true
 
-      # Validate Threagile threat model with optional report generation
+    # Validate Threagile threat model with optional report generation
       # - id: check-threat-modeling
       #   name: Threagile Threat Model Validation
       #   description: Validates threat model YAML, checks untracked critical risks (set THREAGILE_FULL_REPORT=1 for full analysis)

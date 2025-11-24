@@ -3,8 +3,8 @@ variable "project_id" {
   type        = string
 }
 
-variable "environment" {
-  description = "The deployment environment"
+variable "project_suffix" {
+  description = "Project suffix (nonprod or prod)."
   type        = string
 }
 

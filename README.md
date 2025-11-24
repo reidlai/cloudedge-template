@@ -6,7 +6,7 @@ This repository contains the Infrastructure as Code (IaC) for the Vibetics Cloud
 
 ### Overview
 
-The Vibetics CloudEdge platform provides a **6-layer secure baseline infrastructure** designed for cloud-agnostic deployments. This MVP (Feature 001) focuses on establishing the foundational security and networking layers with a demo Cloud Run backend for validation.
+The Vibetics CloudEdge platform provides a **modular secure baseline infrastructure** with 9 configurable components designed for cloud-agnostic deployments. This MVP (Feature 001) focuses on establishing the foundational security and networking layers with a demo Cloud Run backend for validation.
 
 **Current MVP Scope**:
 
@@ -147,7 +147,7 @@ The following diagram shows the **implemented architecture** for this feature:
 | Layer | Component | Security Feature | Purpose |
 |-------|-----------|------------------|---------|
 | **Edge** | Cloud Armor (WAF) | Rate limiting, DDoS protection, OWASP rules | Blocks malicious traffic before it reaches infrastructure |
-| **Ingress VPC** | Firewall Source Restriction | Restricts HTTPS traffic to Google Cloud Load Balancer IPs (`35.191.0.0/16`, `130.211.0.0/22`) | **Defense-in-depth**: Even if WAF is bypassed, only GCP load balancer IPs can reach the ingress layer. Override via `allowed_https_source_ranges` variable for testing. |
+| **Ingress VPC** | Firewall Source Restriction | Restricts HTTPS traffic to configurable source ranges (default: Google Cloud Load Balancer IPs `35.191.0.0/16`, `130.211.0.0/22`) | **Defense-in-depth**: Even if WAF is bypassed, only allowed IPs can reach the ingress layer. Configure via `allowed_https_source_ranges` variable in firewall module. Use `["0.0.0.0/0"]` for testing only. |
 | **Load Balancer** | SSL Certificate | TLS 1.2+ encryption | Encrypts data in transit |
 | **Load Balancer** | URL Map | Domain-based routing via Host header | Routes traffic to correct backend based on hostname |
 | **Backend** | Serverless NEG | Serverless network endpoint | Connects load balancer to Cloud Run without public exposure |
@@ -403,21 +403,24 @@ The root `main.tf` wires module outputs to inputs to create a cohesive infrastru
 
 | **Consumer Module**   | **Input Variable**       | **Source Module**          | **Output**                    | **Reference Location** |
 |-----------------------|--------------------------|----------------------------|-------------------------------|------------------------|
-| `firewall`            | `network_name`           | `ingress_vpc`              | `ingress_vpc_name`            | main.tf:76             |
-| `cdn`                 | `bucket_name`            | `google_storage_bucket`    | `cdn_content.name`            | main.tf:118            |
-| `dr_loadbalancer`     | `default_service_id`     | `demo_backend`             | `backend_service_id`          | main.tf:171            |
-| `dr_loadbalancer`     | `ssl_certificates`       | `self_signed_cert`         | `self_link`                   | main.tf:172            |
+| `firewall`            | `network_name`           | `ingress_vpc`              | `ingress_vpc_name`            | main.tf:83             |
+| `cdn`                 | `bucket_name`            | `google_storage_bucket`    | `cdn_content.name`            | main.tf:125            |
+| `dr_loadbalancer`     | `default_service_id`     | `demo_backend`             | `backend_service_id`          | main.tf:178            |
+| `dr_loadbalancer`     | `ssl_certificates`       | `self_signed_cert`         | `self_link`                   | main.tf:179            |
 
 ### Root Module Outputs
 
 All module outputs are exposed at the root level for external consumption:
 
-- **Load Balancer**: `load_balancer_ip`, `load_balancer_url`
+- **Load Balancer**: `load_balancer_ip`, `load_balancer_url`, `access_instructions`
 - **VPC Networks**: `ingress_vpc_name`, `ingress_vpc_id`, `egress_vpc_name`, `egress_vpc_id`
 - **Security**: `waf_policy_name`, `waf_policy_id`, `firewall_rule_name`
 - **Backend Services**: `demo_backend_service_name`, `cloud_run_service_name`, `cloud_run_service_url`
 - **CDN**: `cdn_backend_name`
 - **Billing**: `billing_budget_id`
+- **Tags**: `resource_tags`
+
+**Note**: The `access_instructions` output provides a complete guide for accessing the deployed infrastructure, including curl examples with the correct Host header for domain-based routing.
 
 ## Quick Start
 
@@ -1078,6 +1081,49 @@ To destroy all infrastructure managed by this deployment, run the following comm
 
 ```bash
 ./scripts/teardown.sh
+```
+
+## Module Feature Flags
+
+All infrastructure modules are controlled by feature flags (variables prefixed with `enable_`). This allows selective deployment of components based on your requirements.
+
+| Variable | Default | Module | Description |
+|----------|---------|--------|-------------|
+| `enable_ingress_vpc` | `false` | `ingress_vpc` | Creates the Ingress VPC for incoming public traffic |
+| `enable_egress_vpc` | `false` | `egress_vpc` | Creates the Egress VPC for outbound traffic from internal services |
+| `enable_firewall` | `false` | `firewall` | Applies baseline firewall rules to the Ingress VPC (requires `enable_ingress_vpc=true`) |
+| `enable_waf` | `false` | `waf` | Deploys Google Cloud Armor WAF policy for DDoS protection |
+| `enable_cdn` | `false` | `cdn` | Creates CDN backend bucket for static content caching (optional - only needed for static assets) |
+| `enable_demo_backend` | `false` | `demo_backend` | Deploys demo Cloud Run service with Serverless NEG for infrastructure validation |
+| `enable_dr_loadbalancer` | `false` | `dr_loadbalancer` | Creates Global HTTPS Load Balancer with domain-based routing (requires `enable_demo_backend=true`) |
+| `enable_self_signed_cert` | `false` | `self_signed_certificate` | Uses self-signed SSL certificate (for testing). If `false`, creates Google-managed certificate using `managed_ssl_domain` |
+| `enable_billing` | `false` | `billing` | Creates billing budget with alert thresholds at 50%, 80%, 100% of HKD 1,000/month |
+| `enable_logging_bucket` | `true` | `demo_backend` | Creates Cloud Logging bucket with 30-day retention for NFR-001 compliance. Set to `false` for fast testing iterations to avoid 1-7 day bucket deletion delays |
+
+**Example: Minimal Deployment (Demo Backend Only)**
+
+```bash
+# In terraform.tfvars or via TF_VAR_* environment variables
+enable_demo_backend    = true
+enable_dr_loadbalancer = true
+enable_waf             = true
+enable_self_signed_cert = true
+```
+
+**Example: Full Production Deployment**
+
+```bash
+enable_ingress_vpc      = true
+enable_egress_vpc       = true
+enable_firewall         = true
+enable_waf              = true
+enable_demo_backend     = true
+enable_dr_loadbalancer  = true
+enable_billing          = true
+enable_logging_bucket   = true
+# enable_cdn            = true  # Only if serving static content
+# enable_self_signed_cert = false  # Use managed certificate for production
+# managed_ssl_domain    = "your-domain.com"
 ```
 
 ## Testing Strategy
