@@ -1,0 +1,47 @@
+# .gitattributes - Git line ending configuration
+# This ensures consistent line endings across Windows, macOS, and Linux
+# Reference: https://git-scm.com/docs/gitattributes
+
+# Auto-detect text files and normalize to LF in repository
+* text=auto
+
+# Explicitly declare text files to always use LF
+*.sh text eol=lf
+*.bash text eol=lf
+*.py text eol=lf
+*.go text eol=lf
+*.tf text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.txt text eol=lf
+*.hcl text eol=lf
+
+# Configuration files
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+Makefile text eol=lf
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+
+# Windows-specific files (keep CRLF)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files (don't normalize)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.so binary
+*.exe binary
+*.dll binary
+*.zip binary
+*.tar.gz binary
+*.tgz binary

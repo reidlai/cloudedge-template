@@ -64,7 +64,23 @@ repos:
       - id: govulncheck
         name: Go SCA (govulncheck)
         description: Scan Go dependencies for known vulnerabilities
-        entry: bash -c 'if command -v govulncheck &> /dev/null; then govulncheck ./...; else echo "INFO govulncheck not installed. Install with go install golang.org/x/vuln/cmd/govulncheck@latest"; exit 0; fi'
+        entry: bash -c
+        args:
+          - -c
+          - |
+            if command -v govulncheck &> /dev/null; then
+              if [ -f go.mod ]; then
+                govulncheck ./...
+              elif [ -f tests/go.mod ]; then
+                (cd tests && govulncheck ./...)
+              else
+                echo "INFO No go.mod found, skipping govulncheck"
+              fi
+            else
+              echo "INFO govulncheck not installed"
+              echo "Install: go install golang.org/x/vuln/cmd/govulncheck@latest"
+              exit 0
+            fi
         language: system
         pass_filenames: false
         files: go\.(mod|sum)$
@@ -190,6 +206,11 @@ repos:
           - |
             # Get repo root for absolute config path
             REPO_ROOT=$(git rev-parse --show-toplevel)
+            # Initialize tflint plugins if not already done
+            if [ ! -d ~/.tflint.d/plugins ]; then
+              echo "Initializing TFLint plugins..."
+              tflint --init --config="${REPO_ROOT}/.tflint.hcl"
+            fi
             tflint --config="${REPO_ROOT}/.tflint.hcl" --call-module-type=all --recursive
         language: system
         pass_filenames: false
