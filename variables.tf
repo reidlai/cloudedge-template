@@ -70,8 +70,8 @@ variable "managed_ssl_domain" {
   default     = ""
 }
 
-variable "demo_api_image" {
-  description = "The container image to use for the demo API."
+variable "demo_web_app_image" {
+  description = "The container image to use for the demo Web App."
   type        = string
   default     = "us-docker.pkg.dev/cloudrun/container/hello"
 }
@@ -102,8 +102,8 @@ variable "enable_waf" {
   default     = false
 }
 
-variable "enable_demo_backend" {
-  description = "If set to true, the demo_backend module will be enabled."
+variable "enable_demo_web_app" {
+  description = "If set to true, the demo_web_app module will be enabled."
   type        = bool
   default     = false
 }

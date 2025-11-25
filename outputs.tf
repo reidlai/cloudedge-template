@@ -17,7 +17,7 @@ output "load_balancer_url" {
 # Cloud Run Outputs
 output "cloud_run_service_url" {
   description = "The direct Cloud Run service URL (internal-only access, use load balancer instead)"
-  value       = var.enable_demo_backend ? "https://${var.project_suffix}-demo-api-${local.project_id}.${var.region}.run.app" : null
+  value       = var.enable_demo_web_app ? "https://${var.project_suffix}-demo-web-app-${local.project_id}.${var.region}.run.app" : null
 }
 
 # Access Instructions
@@ -92,14 +92,14 @@ output "waf_policy_id" {
 }
 
 # Backend Service Outputs
-output "demo_backend_service_name" {
-  description = "The name of the demo backend service"
-  value       = var.enable_demo_backend ? module.demo_backend[0].backend_service_name : null
+output "demo_web_app_service_name" {
+  description = "The name of the demo web app backend service"
+  value       = var.enable_demo_web_app ? module.demo_web_app[0].backend_service_name : null
 }
 
 output "cloud_run_service_name" {
   description = "The name of the Cloud Run service"
-  value       = var.enable_demo_backend ? module.demo_backend[0].cloud_run_service_name : null
+  value       = var.enable_demo_web_app ? module.demo_web_app[0].cloud_run_service_name : null
 }
 
 # CDN Outputs

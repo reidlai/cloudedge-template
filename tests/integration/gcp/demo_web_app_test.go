@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDemoBackend(t *testing.T) {
+func TestDemoWebApp(t *testing.T) {
 	t.Parallel()
 
 	terraformOptions := &terraform.Options{
@@ -21,7 +21,7 @@ func TestDemoBackend(t *testing.T) {
 
 	terraform.InitAndApply(t, terraformOptions)
 
-	backendServiceID := terraform.Output(t, terraformOptions, "demo_backend_service_id")
+	backendServiceID := terraform.Output(t, terraformOptions, "demo_web_app_service_id")
 	assert.NotEmpty(t, backendServiceID)
 
 	lbIpAddress := terraform.Output(t, terraformOptions, "lb_frontend_ip")
