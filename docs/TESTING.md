@@ -1,229 +1,69 @@
-# Integration Testing Guide
+# Testing Strategy
 
-This guide provides the correct steps for running integration tests for the GCP infrastructure.
+This project employs a two-tiered, Test-Driven Development (TDD) approach as mandated by the [constitution](.specify/memory/constitution.md).
 
-## Quick Start
+## Tier 1: Unit Tests (Local, Pre-Commit)
 
-### 1. Setup Environment
+Unit tests are designed to validate the logic of individual OpenTofu modules in isolation, without deploying real resources.
 
-```bash
-# Copy the example environment file
-cp .env.example .env
+- **Framework**: OpenTofu Native Testing (`tofu test`)
+- **Location**: `*.tftest.hcl` files within each module's directory
+- **Status**: ⚠️ **Not yet implemented** - Native unit tests are planned for future iterations
 
-# Edit .env with your GCP project details
-# Required: TF_VAR_project_id
-# Optional: TF_VAR_environment, TF_VAR_region
-```
+**Note**: Currently, this project uses **Tier 2 integration tests only** (see below). The `tofu test` command will return `0 passed, 0 failed` because no `.tftest.hcl` files exist yet. For testing infrastructure, use the Terratest integration tests described in Tier 2.
 
-Example `.env`:
+## Tier 2: Integration & BDD Tests (Post-Deployment)
 
-```bash
-TF_VAR_project_id=vibetics-nonprod
-TF_VAR_environment=nonprod
-TF_VAR_region=northamerica-northeast2
-TF_VAR_cloud_provider=gcp
-GOOGLE_PROJECT=vibetics-nonprod
-```
+This tier validates the behavior of the fully deployed infrastructure. It is driven by Behavior-Driven Development (BDD) principles.
 
-### 2. Clean Environment Before Tests
+- **Framework**: Terratest (Go) with Cucumber for BDD.
+- **Specifications**: Human-readable Gherkin scenarios are defined in `.feature` files within the `features/` directory.
+- **Implementation**: The Go test files in `tests/integration/` and `tests/contract/` implement the steps defined in the Gherkin scenarios.
+
+**How to Run All Integration Tests:**
+This command deploys the infrastructure, runs all integration tests against it, and then tears it down.
 
 ```bash
-# Load environment variables
-source .env
-
-# Clean up any leftover resources
-./scripts/teardown.sh
-```
-
-### 3. Run Tests
-
-```bash
-# Load environment variables
-source .env
-
-# Run a specific test
 cd tests/integration/gcp
-go test -v -run TestFirewallSourceRestriction -timeout 20m
+go test -v -timeout 30m
 ```
 
-## Testing Workflow
-
-### Option 1: Individual Test (Recommended)
-
-Run one test at a time to avoid quota limits:
+**How to Run Specific Tests:**
+You can run individual test suites for faster feedback:
 
 ```bash
-source .env
 cd tests/integration/gcp
 
-# Test firewall source restrictions
-go test -v -run TestFirewallSourceRestriction -timeout 20m
+# Full baseline test (all 7 components + connectivity)
+go test -v -run TestFullBaseline -timeout 30m
 
-# Test CIS compliance
+# CIS compliance test
 go test -v -run TestCISCompliance -timeout 20m
 
-# Test full baseline deployment
-go test -v -run TestFullBaseline -timeout 20m
+# Mandatory tagging test
+go test -v -run TestMandatoryResourceTagging -timeout 20m
+
+# Teardown validation test
+go test -v -run TestTeardown -timeout 20m
 ```
 
-### Option 2: All Tests Sequentially
+**How to Run Contract Tests:**
+Contract tests validate IaC compliance using Checkov:
 
 ```bash
-source .env
-cd tests/integration/gcp
+# Ensure Poetry dependencies are installed first
+poetry install
 
-# Run all tests (may take 30+ minutes)
-go test -v -timeout 60m
+# Run contract tests
+cd tests/contract
+poetry run go test -v -timeout 10m
 ```
 
-### Option 3: Skip Integration Tests
+**Troubleshooting: "0 passed, 0 failed"**
 
-During rapid development, skip integration tests:
+If you see this message, you likely ran `tofu test` instead of the Go integration tests. This project uses **Terratest (Go)**, not OpenTofu native tests. Use the commands above to run tests.
 
-```bash
-source .env
-cd tests/integration/gcp
+### Testing in the CI/CD Pipeline
 
-# Run only fast unit tests
-go test -v -short -timeout 5m
-```
-
-## Cleanup After Tests
-
-Tests automatically clean up via `defer terraform.Destroy()`. If a test crashes:
-
-```bash
-source .env
-./scripts/teardown.sh
-```
-
-## Verifying Clean State
-
-Check no leftover resources exist:
-
-```bash
-source .env
-
-# Should only show "default" network
-gcloud compute networks list --project=$TF_VAR_project_id
-
-# Should show no custom security policies
-gcloud compute security-policies list --project=$TF_VAR_project_id
-
-# Should show no reserved global IPs
-gcloud compute addresses list --project=$TF_VAR_project_id --global
-```
-
-## Common Issues
-
-### Issue: Resource Already Exists (409)
-
-**Cause**: Previous test didn't complete cleanup
-
-**Solution**:
-
-```bash
-source .env
-./scripts/teardown.sh
-```
-
-### Issue: Network Quota Exceeded (5 limit)
-
-**Cause**: Multiple VPCs from failed tests
-
-**Solution**:
-
-```bash
-source .env
-
-# List all networks
-gcloud compute networks list --project=$TF_VAR_project_id
-
-# Delete leftover networks (keep "default")
-gcloud compute networks delete <network-name> \
-  --project=$TF_VAR_project_id --quiet
-```
-
-### Issue: VPC Connector Blocking Deletion
-
-**Cause**: GCP auto-creates firewall rules for VPC connectors
-
-**Solution**:
-
-```bash
-source .env
-
-# Delete VPC connector first
-gcloud compute networks vpc-access connectors delete <connector-name> \
-  --region=$TF_VAR_region --project=$TF_VAR_project_id --quiet
-
-# Then delete network
-gcloud compute networks delete <network-name> \
-  --project=$TF_VAR_project_id --quiet
-```
-
-## Test Interpretation
-
-### Success
-
-```
---- PASS: TestFirewallSourceRestriction (613.13s)
-PASS
-ok      vibetics-cloudedge/tests/integration/gcp        613.172s
-```
-
-### Failure
-
-```
---- FAIL: TestFirewallSourceRestriction (54.30s)
-FAIL
-exit status 1
-FAIL    vibetics-cloudedge/tests/integration/gcp        54.336s
-```
-
-**Important**: Always review FULL test output, not just return codes!
-
-## Complete Workflow Example
-
-```bash
-# 1. Setup
-cp .env.example .env
-# Edit .env with your project ID
-
-# 2. Load environment
-source .env
-
-# 3. Clean before test
-./scripts/teardown.sh
-
-# 4. Verify clean state
-gcloud compute networks list --project=$TF_VAR_project_id
-
-# 5. Run test
-cd tests/integration/gcp
-go test -v -run TestFirewallSourceRestriction -timeout 20m 2>&1 | tee test-output.log
-
-# 6. Review output (not just return code!)
-grep -E "PASS|FAIL|Error" test-output.log
-
-# 7. Cleanup (if test crashed)
-cd ../../..
-source .env
-./scripts/teardown.sh
-```
-
-## Best Practices
-
-✅ **DO**:
-
-- Always `source .env` before running scripts/tests
-- Review FULL test output for errors
-- Run tests sequentially to avoid quota limits
-- Clean environment before each test run
-
-❌ **DON'T**:
-
-- Don't rely on return codes only
-- Don't run multiple tests in parallel (quota limits)
-- Don't assume environment is clean
-- Don't forget to source .env before running tests
+- **Continuous Integration (CI)**: On every Pull Request, the CI pipeline runs static analysis (Checkov, Semgrep) and OpenTofu validation. Unit tests (`.tftest.hcl` files) are planned for future implementation.
+- **Continuous Deployment (CD)**: After a successful deployment to the `nonprod` environment, the CD pipeline will execute the **Tier 2 Integration and Smoke Tests** against the live infrastructure to ensure it is behaving as expected. This is also where post-deployment DAST scans will be run.
