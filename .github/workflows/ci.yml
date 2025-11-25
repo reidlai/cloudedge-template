@@ -365,20 +365,8 @@ jobs:
       - name: OpenTofu Validate
         run: tofu validate
 
-      - name: OpenTofu Plan
-        if: github.event_name == 'pull_request'
-        run: |
-          tofu plan -out=plan.tfplan
-        env:
-          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
-
-      - name: Upload plan
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: tofu-plan
-          path: plan.tfplan
-          retention-days: 7
+      # OpenTofu Plan step removed - validation is sufficient for CI
+      # Plan generation should be done in deployment environments only
 
   # ============================================================================
   # Job 6: Summary
