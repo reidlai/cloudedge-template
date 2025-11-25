@@ -151,18 +151,18 @@ locals {
   load_balancer_host = var.enable_self_signed_cert ? "example.com" : var.managed_ssl_domain
 }
 
-# --- Demo Backend Environment ---
+# --- Demo Web App Environment ---
 
-# Deploys the secure, internal-only demo backend using PSC (Private Service Connect)
+# Deploys the secure, internal-only demo web app using PSC (Private Service Connect)
 # PSC connectivity via Serverless NEG - no VPC peering required
-module "demo_backend" {
-  count                 = var.enable_demo_backend ? 1 : 0
-  source                = "./modules/gcp/demo_backend"
+module "demo_web_app" {
+  count                 = var.enable_demo_web_app ? 1 : 0
+  source                = "./modules/gcp/demo_web_app"
   project_id            = local.project_id
   project_suffix        = var.project_suffix
   region                = var.region
   resource_tags         = local.standard_tags
-  demo_api_image        = var.demo_api_image
+  demo_web_app_image    = var.demo_web_app_image
   enable_logging_bucket = var.enable_logging_bucket
 }
 
@@ -175,17 +175,17 @@ module "dr_loadbalancer" {
   project_id         = local.project_id
   project_suffix     = var.project_suffix
   resource_tags      = local.standard_tags
-  default_service_id = module.demo_backend[0].backend_service_id
+  default_service_id = module.demo_web_app[0].backend_service_id
   ssl_certificates   = local.ssl_certificate_links
   host_rules = [
     {
       hosts        = [local.load_balancer_host]
-      path_matcher = "demo-api-matcher"
+      path_matcher = "demo-web-app-matcher"
     }
   ]
   path_matchers = {
-    "demo-api-matcher" = {
-      default_service = module.demo_backend[0].backend_service_id
+    "demo-web-app-matcher" = {
+      default_service = module.demo_web_app[0].backend_service_id
       path_rules      = []
     }
   }

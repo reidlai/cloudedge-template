@@ -18,8 +18,8 @@ variable "resource_tags" {
   type        = map(string)
 }
 
-variable "demo_api_image" {
-  description = "The container image to use for the demo API."
+variable "demo_web_app_image" {
+  description = "The container image to use for the demo Web App."
   type        = string
   default     = "us-docker.pkg.dev/cloudrun/container/hello"
 }
