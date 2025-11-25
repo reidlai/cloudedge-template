@@ -217,17 +217,13 @@ For detailed test execution commands, troubleshooting, and CI/CD pipeline integr
 
 ## Security Documentation
 
-This project implements defense-in-depth security with multiple layers of protection. For the security controls table, see the [Key Security Controls](#key-security-controls) section in the Architecture Overview above.
+### Security Overview
 
-### Threat Modeling
+This project implements a comprehensive **defense-in-depth security strategy** with multiple layers of protection spanning edge security (Cloud Armor WAF with OWASP rules and DDoS protection), network segmentation (ingress/egress VPCs with strict firewall policies), secure load balancing (TLS 1.2+ encryption and SSL termination), and backend isolation (Cloud Run with internal-only ingress). Each layer enforces independent security controls, ensuring that even if one layer is compromised, subsequent layers continue to protect critical infrastructure. For the complete security controls matrix, see the [Key Security Controls](#key-security-controls) section above.
 
-This project requires threat modeling as mandated by the [constitution](.specify/memory/constitution.md) (§7). We use **Threagile** - an open-source threat modeling toolkit that automatically generates threat reports via CI/CD pipelines.
+**Compliance Posture**: The infrastructure adheres to the project [constitution](.specify/memory/constitution.md) which mandates DevSecOps gates at every stage: secrets scanning (gitleaks), Software Composition Analysis (Checkov), Static Application Security Testing (Semgrep), container scanning (Trivy), and Dynamic Application Security Testing (OWASP ZAP). All security findings rated CRITICAL or HIGH block CI/CD promotion unless an approved, time-bound waiver is obtained. The constitution enforces zero-tolerance for secrets in repositories, requires distroless base images with non-root execution, and mandates BDD-based integration testing using Terratest for all infrastructure changes.
 
-- **Automated CI Validation**: Threat model reports generated on every PR
-- **STRIDE Analysis**: Manual threat modeling required for major architecture changes
-- **Pre-Commit Hooks**: Validates threat model YAML syntax before commits
-
-For detailed threat modeling workflows, local execution guides, risk tracking procedures, and STRIDE methodology, see [docs/SECURITY.md](docs/SECURITY.md).
+**Threat Modeling**: Per constitution §7, this project uses **Threagile** for automated threat modeling, generating threat reports on every PR. Manual STRIDE analysis is required for major architectural changes. All threat findings are tracked with severity labels (CRITICAL/HIGH/MEDIUM/LOW) and remediation timelines. For detailed threat modeling workflows, STRIDE methodology guides, DevSecOps pipeline configuration, risk tracking procedures, and security audit processes, see [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Documentation
 
