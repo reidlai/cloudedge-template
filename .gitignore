@@ -8,11 +8,16 @@ Thumbs.db
 .terraform/
 *.tfstate*
 *.tfvars
-.terraform.lock.hcl
+# Note: .terraform.lock.hcl is NOT ignored (required for provider version consistency per FR-007)
 
 # Backend Configuration (Auto-generated)
 backend-config.hcl
 terraform.tfstate.local.backup.*
+
+# Migration Backups (Temporary)
+state-backup-*.tfstate
+backend.tf.backup-*
+backend-config.hcl.backup-*
 
 # TFLint Module Configs (Auto-copied from root)
 modules/**/.tflint.hcl
