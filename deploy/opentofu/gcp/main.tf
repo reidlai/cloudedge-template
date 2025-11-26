@@ -136,6 +136,8 @@ module "private_ca" {
   region             = var.region
   domain             = var.managed_ssl_domain != "" ? var.managed_ssl_domain : "${local.project_id}.internal"
   authorized_members = var.authorized_ca_users
+  pool_name          = var.private_ca_pool_name
+  location           = var.private_ca_location
 }
 
 resource "google_compute_managed_ssl_certificate" "managed_cert" {

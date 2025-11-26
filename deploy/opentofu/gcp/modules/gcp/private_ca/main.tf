@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 4.0.0"
     }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = ">= 4.0.0"
+    }
   }
 }
 
@@ -22,14 +26,14 @@ resource "google_project_service" "certificatemanager" {
 
 # Create CA Pool (DevOps Tier)
 resource "google_privateca_ca_pool" "default" {
-  name     = "${var.project_suffix}-ca-pool"
-  location = var.region
+  name     = var.pool_name
+  location = var.location != "" ? var.location : var.region
   tier     = "DEVOPS" # FR-016
   project  = var.project_id
 
   publishing_options {
     publish_ca_cert = true
-    publish_crl     = true
+    publish_crl     = false # DEVOPS tier does not support CRL publishing
   }
 
   depends_on = [google_project_service.privateca]
@@ -39,7 +43,7 @@ resource "google_privateca_ca_pool" "default" {
 resource "google_privateca_certificate_authority" "default" {
   pool                     = google_privateca_ca_pool.default.name
   certificate_authority_id = "${var.project_suffix}-root-ca"
-  location                 = var.region
+  location                 = var.location != "" ? var.location : var.region
   project                  = var.project_id
   type                     = "SELF_SIGNED"
 
@@ -85,7 +89,7 @@ resource "google_certificate_manager_certificate_issuance_config" "default" {
       ca_pool = google_privateca_ca_pool.default.id
     }
   }
-  lifetime                   = "1209600s" # 14 days
+  lifetime                   = "2592000s" # 30 days (minimum 504h = 21 days)
   rotation_window_percentage = 50
   key_algorithm              = "RSA_2048"
 
@@ -132,11 +136,22 @@ data "google_project" "current" {
   project_id = var.project_id
 }
 
+# Create Service Identity for Certificate Manager
+resource "google_project_service_identity" "cert_manager_identity" {
+  provider = google-beta
+  service  = "certificatemanager.googleapis.com"
+  project  = var.project_id
+
+  depends_on = [google_project_service.certificatemanager]
+}
+
 # Grant Certificate Manager Service Account access to CA Pool
 resource "google_privateca_ca_pool_iam_member" "cert_manager_binding" {
   ca_pool = google_privateca_ca_pool.default.id
   role    = "roles/privateca.certificateRequester"
-  member  = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-certificatemanager.iam.gserviceaccount.com"
+  member  = "serviceAccount:${google_project_service_identity.cert_manager_identity.email}"
+
+  depends_on = [google_privateca_certificate_authority.default]
 }
 
 # Grant Cross-Project Access (FR-017)

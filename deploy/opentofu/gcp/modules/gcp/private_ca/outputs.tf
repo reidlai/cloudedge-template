@@ -9,6 +9,9 @@ output "ca_pool_id" {
 }
 
 output "certificate_map_id" {
-  description = "The ID of the Certificate Map."
-  value       = google_certificate_manager_certificate_map.default.id
+  description = "The ID of the Certificate Map (after entry is created)."
+  # Reference the map entry to ensure proper dependency ordering
+  # The HTTPS proxy needs the map to have at least one entry before it can be used
+  value      = "//certificatemanager.googleapis.com/${google_certificate_manager_certificate_map.default.id}"
+  depends_on = [google_certificate_manager_certificate_map_entry.default]
 }

@@ -23,3 +23,15 @@ variable "authorized_members" {
   type        = list(string)
   default     = []
 }
+
+variable "pool_name" {
+  description = "The name of the CA pool."
+  type        = string
+  default     = "ca-pool"
+}
+
+variable "location" {
+  description = "The location of the CA pool. If empty, uses var.region."
+  type        = string
+  default     = ""
+}

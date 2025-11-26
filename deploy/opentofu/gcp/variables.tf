@@ -147,3 +147,21 @@ variable "enable_logging_bucket" {
   type        = bool
   default     = true
 }
+
+variable "private_ca_pool_name" {
+  description = "The name of the Private CA pool."
+  type        = string
+  default     = "ca-pool"
+}
+
+variable "private_ca_location" {
+  description = "The location for the Private CA pool. If not provided, defaults to var.region."
+  type        = string
+  default     = ""
+}
+
+variable "domain_name" {
+  description = "The domain name for the certificate. If not provided, defaults to var.managed_ssl_domain."
+  type        = string
+  default     = ""
+}
