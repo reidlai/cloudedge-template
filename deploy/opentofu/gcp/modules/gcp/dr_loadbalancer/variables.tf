@@ -37,9 +37,13 @@ variable "path_matchers" {
 
 
 variable "ssl_certificates" {
-
   description = "A list of SSL certificate self_links to attach to the HTTPS proxy."
+  type        = list(string)
+  default     = []
+}
 
-  type = list(string)
-
+variable "certificate_map" {
+  description = "The ID of the Certificate Map to attach to the HTTPS proxy (Certificate Manager)."
+  type        = string
+  default     = null
 }

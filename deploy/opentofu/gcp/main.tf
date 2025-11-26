@@ -128,15 +128,18 @@ module "cdn" {
 
 # --- SSL Certificate Configuration ---
 
-module "self_signed_cert" {
-  count          = var.enable_self_signed_cert ? 1 : 0
-  source         = "./modules/gcp/self_signed_certificate"
-  project_id     = local.project_id
-  project_suffix = var.project_suffix
+module "private_ca" {
+  count              = var.enable_private_ca ? 1 : 0
+  source             = "./modules/gcp/private_ca"
+  project_id         = local.project_id
+  project_suffix     = var.project_suffix
+  region             = var.region
+  domain             = var.managed_ssl_domain != "" ? var.managed_ssl_domain : "${local.project_id}.internal"
+  authorized_members = var.authorized_ca_users
 }
 
 resource "google_compute_managed_ssl_certificate" "managed_cert" {
-  count   = var.enable_self_signed_cert ? 0 : 1
+  count   = var.enable_private_ca ? 0 : 1
   project = local.project_id
   name    = "${var.project_suffix}-managed-cert"
   managed {
@@ -146,9 +149,10 @@ resource "google_compute_managed_ssl_certificate" "managed_cert" {
 
 locals {
   # Determine which certificate to use based on the feature flag
-  ssl_certificate_links = var.enable_self_signed_cert ? [module.self_signed_cert[0].self_link] : [google_compute_managed_ssl_certificate.managed_cert[0].self_link]
-  # Use a placeholder host for self-signed certs, as there's no real domain.
-  load_balancer_host = var.enable_self_signed_cert ? "example.com" : var.managed_ssl_domain
+  ssl_certificate_links = var.enable_private_ca ? [] : [google_compute_managed_ssl_certificate.managed_cert[0].self_link]
+  certificate_map_id    = var.enable_private_ca ? module.private_ca[0].certificate_map_id : null
+  # Use the configured domain or a placeholder
+  load_balancer_host = var.managed_ssl_domain != "" ? var.managed_ssl_domain : "${local.project_id}.internal"
 }
 
 # --- Demo Web App Environment ---
@@ -177,6 +181,7 @@ module "dr_loadbalancer" {
   resource_tags      = local.standard_tags
   default_service_id = module.demo_web_app[0].backend_service_id
   ssl_certificates   = local.ssl_certificate_links
+  certificate_map    = local.certificate_map_id
   host_rules = [
     {
       hosts        = [local.load_balancer_host]

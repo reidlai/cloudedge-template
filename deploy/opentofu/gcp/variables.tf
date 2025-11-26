@@ -118,10 +118,16 @@ variable "enable_dr_loadbalancer" {
 # Cloud Run uses Serverless NEG for direct PSC connectivity to load balancer
 # VPC Peering only needed for GKE/VM backends (future feature)
 
-variable "enable_self_signed_cert" {
-  description = "If true, use the self-signed certificate module for the load balancer. Otherwise, create a Google-managed SSL certificate."
+variable "enable_private_ca" {
+  description = "If true, use the Google Managed Private CA module for the load balancer."
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "authorized_ca_users" {
+  description = "List of IAM members (e.g. serviceAccount:name@project.iam.gserviceaccount.com) authorized to request certificates from the Private CA."
+  type        = list(string)
+  default     = []
 }
 
 variable "enable_billing" {

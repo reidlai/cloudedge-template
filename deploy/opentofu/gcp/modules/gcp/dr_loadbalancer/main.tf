@@ -36,7 +36,8 @@ resource "google_compute_target_https_proxy" "https_proxy" {
   project          = var.project_id
   name             = "${var.project_suffix}-https-proxy"
   url_map          = google_compute_url_map.url_map.id
-  ssl_certificates = var.ssl_certificates
+  ssl_certificates = var.certificate_map != null ? null : var.ssl_certificates
+  certificate_map  = var.certificate_map
 }
 
 resource "google_compute_global_forwarding_rule" "forwarding_rule" {

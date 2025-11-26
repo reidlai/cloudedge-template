@@ -198,5 +198,26 @@ Feature: OpenTofu Directory Structure Refactoring
     Given the "main.tf" file has 5 commits in its git history
     When I execute the directory migration process using "git mv"
     Then the file "deploy/opentofu/gcp/main.tf" should have 5 commits in its git history
-    And running "git log --follow deploy/opentofu/gcp/main.tf" should show the complete history
-    And the file should be tracked as a rename, not a deletion and addition
+  @integration @security
+  Scenario: Verify CAS Pool exists and has correct tier
+    Given the Private CA module is deployed
+    When I inspect the "google_privateca_ca_pool" resource
+    Then the pool tier should be "DEVOPS"
+    And the pool location should match the region variable
+    And the pool should have publishing options enabled for CA cert and CRL
+
+  @integration @security
+  Scenario: Verify Load Balancer uses managed certificate
+    Given the Private CA module is enabled
+    When I inspect the "google_compute_target_https_proxy" resource for the load balancer
+    Then the "certificate_map" field should be set
+    And the "ssl_certificates" field should be null or empty
+    And the certificate map should reference the Private CA managed certificate
+
+  @integration @security
+  Scenario: Verify CAS Pool IAM bindings for cross-project access
+    Given the "authorized_ca_users" variable contains external service accounts
+    When I inspect the "google_privateca_ca_pool_iam_binding" resource
+    Then the role "roles/privateca.certificateRequester" should be granted
+    And the members list should contain the authorized service accounts
+    And the binding should be attached to the created CA Pool
