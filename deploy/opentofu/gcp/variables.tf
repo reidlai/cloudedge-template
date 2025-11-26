@@ -13,8 +13,18 @@ variable "project_suffix" {
   }
 }
 
+variable "cloudedge_github_owner" {
+  description = "The GitHub owner name for the Cloud Edge project"
+  type        = string
+}
+
 variable "cloudedge_github_repository" {
-  description = "The GitHub repository name for the Cloud Edge project (e.g., 'vibetics-cloudedge')."
+  description = "The GitHub repository name for the Cloud Edge project excluding owner name"
+  type        = string
+}
+
+variable "project_id" {
+  description = "The GCP Project ID where resources will be deployed."
   type        = string
 }
 
@@ -76,7 +86,23 @@ variable "demo_web_app_image" {
   default     = "us-docker.pkg.dev/cloudrun/container/hello"
 }
 
+variable "private_ca_pool_name" {
+  description = "The name of the Private CA pool."
+  type        = string
+  default     = "ca-pool"
+}
 
+variable "private_ca_location" {
+  description = "The location for the Private CA pool. If not provided, defaults to var.region."
+  type        = string
+  default     = ""
+}
+
+variable "domain_name" {
+  description = "The domain name for the certificate. If not provided, defaults to var.managed_ssl_domain."
+  type        = string
+  default     = ""
+}
 
 variable "enable_ingress_vpc" {
   description = "If set to true, the ingress_vpc module will be enabled."
@@ -146,22 +172,4 @@ variable "enable_logging_bucket" {
   description = "If set to true, create a Cloud Logging bucket for the demo backend (NFR-001 compliance). Set to false for fast testing iterations to avoid 1-7 day bucket deletion delays."
   type        = bool
   default     = true
-}
-
-variable "private_ca_pool_name" {
-  description = "The name of the Private CA pool."
-  type        = string
-  default     = "ca-pool"
-}
-
-variable "private_ca_location" {
-  description = "The location for the Private CA pool. If not provided, defaults to var.region."
-  type        = string
-  default     = ""
-}
-
-variable "domain_name" {
-  description = "The domain name for the certificate. If not provided, defaults to var.managed_ssl_domain."
-  type        = string
-  default     = ""
 }

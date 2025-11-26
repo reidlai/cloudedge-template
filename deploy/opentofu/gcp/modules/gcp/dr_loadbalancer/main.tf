@@ -34,10 +34,14 @@ resource "google_compute_url_map" "url_map" {
 
 resource "google_compute_target_https_proxy" "https_proxy" {
   project          = var.project_id
-  name             = "${var.project_suffix}-https-proxy"
+  name             = "${var.project_suffix}-https-proxy-v2"
   url_map          = google_compute_url_map.url_map.id
   ssl_certificates = var.certificate_map != null ? null : var.ssl_certificates
   certificate_map  = var.certificate_map
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "google_compute_global_forwarding_rule" "forwarding_rule" {

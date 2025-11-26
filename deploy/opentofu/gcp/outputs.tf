@@ -17,7 +17,7 @@ output "load_balancer_url" {
 # Cloud Run Outputs
 output "cloud_run_service_url" {
   description = "The direct Cloud Run service URL (internal-only access, use load balancer instead)"
-  value       = var.enable_demo_web_app ? "https://${var.project_suffix}-demo-web-app-${local.project_id}.${var.region}.run.app" : null
+  value       = var.enable_demo_web_app ? module.demo_web_app[0].cloud_run_service_uri : null
 }
 
 # Access Instructions
