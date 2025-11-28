@@ -13,7 +13,7 @@ func TestCheckovScan(t *testing.T) {
 	t.Parallel()
 
 	terraformOptions := &terraform.Options{
-		TerraformDir: "../../",
+		TerraformDir: "../../deploy/opentofu/gcp",
 	}
 
 	// Initialize and validate OpenTofu configuration
@@ -27,7 +27,7 @@ func TestCheckovScan(t *testing.T) {
 	checkovCmd := shell.Command{
 		Command: "checkov",
 		Args: []string{
-			"--directory", "../../",
+			"--directory", "../../deploy/opentofu/gcp",
 			"--framework", "terraform",
 			"--quiet",
 			"--compact",
