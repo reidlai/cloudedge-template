@@ -21,11 +21,11 @@ The following diagram illustrates the dependencies between OpenTofu modules and 
                      └──────────────┘
 
 ┌─────────────────┐    ┌──────────────────────┐
-│  Self-Signed    │───▶│  DR Load Balancer    │◀─────┐
-│  Certificate    │    │                      │       │
-│                 │    │  Inputs:             │       │
-│  Outputs:       │    │  - ssl_certificates ← self_signed_cert.self_link
-│  - self_link    │    │  - default_service_id ← demo_backend.backend_service_id
+│  Private CA     │───▶│  DR Load Balancer    │◀─────┐
+│                 │    │                      │       │
+│  Outputs:       │    │  Inputs:             │       │
+│  - cert_map_id  │───▶│  - certificate_map   ← private_ca.certificate_map_id
+│                 │    │  - default_service_id ← demo_backend.backend_service_id
 └─────────────────┘    └──────────────────────┘       │
                                                       │
 ┌─────────────────┐                                   │

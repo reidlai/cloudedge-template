@@ -157,7 +157,7 @@ The root `main.tf` wires module outputs to inputs to create a cohesive infrastru
 | `firewall`            | `network_name`           | `ingress_vpc`              | `ingress_vpc_name`            | main.tf:83             |
 | `cdn`                 | `bucket_name`            | `google_storage_bucket`    | `cdn_content.name`            | main.tf:125            |
 | `dr_loadbalancer`     | `default_service_id`     | `demo_backend`             | `backend_service_id`          | main.tf:178            |
-| `dr_loadbalancer`     | `ssl_certificates`       | `self_signed_cert`         | `self_link`                   | main.tf:179            |
+| `dr_loadbalancer`     | `certificate_map`        | `private_ca`               | `certificate_map_id`          | main.tf:179            |
 
 ### Root Module Outputs
 
