@@ -84,11 +84,13 @@ deploy/opentofu/            # Opentofu core scripts folder
 ├── gcp/
 |   ├──project-singleton    # All scripts under this folder are used to manage resources which are specific for GCP project singleton resources (resource removal takes grace period more than one day)
 |   │  ├── locals.tf                  # local variables
-|   │  ├── main.tf                    # Main OpenTofu file including terraform block
+|   │  ├──
+main.tf                    # Main OpenTofu file including terraform block
 |   │  ├── variables.tf               # Root module variables
 |   │  └── outputs.tf                 # Root module outputs
 |   └──environment-specific # All scripts under this folder are used to manage resources which are easily be removed immediately in GCP within few mintues
-|      ├── main.tf                    # Main OpenTofu file including terraform block
+|      ├──
+main.tf                    # Main OpenTofu file including terraform block
 |      ├── variables.tf               # Root module variables
 |      └── outputs.tf                 # Root module outputs
 ├── aws/                    # Placehodler folder for future AWS implementation
@@ -164,13 +166,13 @@ All scripts must be run from repository root.
 
 When using workflow commands:
 
-1.  Start with `/speckit.constitution` (if not already defined)
-2.  Run `/speckit.specify` with feature description
-3.  Run `/speckit.clarify` to resolve ambiguities
-4.  Run `/speckit.plan` to generate design artifacts
-5.  Run `/speckit.tasks` to create task breakdown
-6.  Optional: Run `/speckit.analyze` to validate consistency
-7.  Run `/speckit.implement` to execute tasks
+1. Start with `/speckit.constitution` (if not already defined)
+2. Run `/speckit.specify` with feature description
+3. Run `/speckit.clarify` to resolve ambiguities
+4. Run `/speckit.plan` to generate design artifacts
+5. Run `/speckit.tasks` to create task breakdown
+6. Optional: Run `/speckit.analyze` to validate consistency
+7. Run `/speckit.implement` to execute tasks
 
 ## Project Technical Stack
 
@@ -178,14 +180,13 @@ When using workflow commands:
 **CI**: GitHub Actions with multi-environment promotion flow
 **CD**: Cloud provider deployment tool
 **Security Tools**:
+
 - Secrets: gitleaks
 - SCA: checkov
 - SAST: Semgrep
 
 
-
-
-
+```
 main.tf                    # Main OpenTofu file
 variables.tf               # Root module variables
 outputs.tf                 # Root module outputs
