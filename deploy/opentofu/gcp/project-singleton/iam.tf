@@ -20,8 +20,8 @@ resource "google_privateca_ca_pool_iam_member" "cert_manager_binding" {
 
 # Grant Cross-Project Access (FR-017)
 resource "google_privateca_ca_pool_iam_binding" "cross_project_binding" {
-  count   = length(var.authorized_members) > 0 ? 1 : 0
+  count   = length(var.authorized_ca_users) > 0 ? 1 : 0
   ca_pool = google_privateca_ca_pool.privateca_ca_pool[0].id
   role    = "roles/privateca.certificateRequester"
-  members = var.authorized_members
+  members = var.authorized_ca_users
 }

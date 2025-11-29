@@ -28,22 +28,17 @@ variable "project_id" {
   type        = string
 }
 
-# variable "billing_account" {
-#   description = "The GCP Billing Account ID."
-#   type        = string
-# }
+variable "ingress_vpc_cidr_range" {
+  description = "The CIDR range for the ingress VPC subnetwork."
+  type        = string
+  default     = "10.0.1.0/24"
+}
 
-# variable "ingress_vpc_cidr_range" {
-#   description = "The CIDR range for the ingress VPC subnetwork."
-#   type        = string
-#   default     = "10.0.1.0/24"
-# }
-
-# variable "egress_vpc_cidr_range" {
-#   description = "The CIDR range for the egress VPC subnetwork."
-#   type        = string
-#   default     = "10.0.2.0/24"
-# }
+variable "egress_vpc_cidr_range" {
+  description = "The CIDR range for the egress VPC subnetwork."
+  type        = string
+  default     = "10.0.2.0/24"
+}
 
 variable "region" {
   description = "The primary GCP region for regional resources."
@@ -74,58 +69,53 @@ variable "resource_tags" {
   }
 }
 
-# variable "managed_ssl_domain" {
-#   description = "The domain name to use for the Google-managed SSL certificate."
-#   type        = string
-#   default     = ""
-# }
-
 variable "demo_web_app_image" {
   description = "The container image to use for the demo Web App."
   type        = string
   default     = "us-docker.pkg.dev/cloudrun/container/hello"
 }
 
-# variable "private_ca_pool_name" {
-#   description = "The name of the Private CA pool."
-#   type        = string
-# }
+variable "enable_ingress_vpc" {
+  description = "If set to true, the ingress_vpc module will be enabled."
+  type        = bool
+  default     = false
+}
 
-# variable "private_ca_location" {
-#   description = "The location for the Private CA pool. If not provided, defaults to var.region."
-#   type        = string
-#   default     = ""
-# }
+variable "enable_egress_vpc" {
+  description = "If set to true, the egress_vpc module will be enabled."
+  type        = bool
+  default     = false
+}
 
-# variable "domain_name" {
-#   description = "The domain name for the certificate. If not provided, defaults to var.managed_ssl_domain."
-#   type        = string
-#   default     = ""
-# }
+variable "enable_web_vpc" {
+  description = "If set to true, the web VPC and VPC Access Connector will be created for Cloud Run network isolation."
+  type        = bool
+  default     = false
+}
 
-# variable "enable_ingress_vpc" {
-#   description = "If set to true, the ingress_vpc module will be enabled."
-#   type        = bool
-#   default     = false
-# }
+variable "web_vpc_cidr_range" {
+  description = "The CIDR range for the web VPC subnetwork."
+  type        = string
+  default     = "10.0.3.0/24"
+}
 
-# variable "enable_egress_vpc" {
-#   description = "If set to true, the egress_vpc module will be enabled."
-#   type        = bool
-#   default     = false
-# }
+variable "vpc_connector_cidr_range" {
+  description = "The CIDR range for the VPC Access Connector subnet. Must be /28 or larger."
+  type        = string
+  default     = "10.0.4.0/28"
+}
 
-# variable "enable_firewall" {
-#   description = "If set to true, the firewall module will be enabled."
-#   type        = bool
-#   default     = false
-# }
+variable "enable_firewall" {
+  description = "If set to true, the firewall module will be enabled."
+  type        = bool
+  default     = false
+}
 
-# variable "enable_waf" {
-#   description = "If set to true, the waf module will be enabled."
-#   type        = bool
-#   default     = false
-# }
+variable "enable_waf" {
+  description = "If set to true, the waf module will be enabled."
+  type        = bool
+  default     = false
+}
 
 variable "enable_demo_web_app" {
   description = "If set to true, the demo_web_app module will be enabled."
@@ -133,42 +123,82 @@ variable "enable_demo_web_app" {
   default     = false
 }
 
-# variable "enable_dr_loadbalancer" {
-#   description = "If set to true, the dr_loadbalancer module will be enabled."
-#   type        = bool
-#   default     = false
-# }
+variable "enable_dr_loadbalancer" {
+  description = "If set to true, the dr_loadbalancer module will be enabled."
+  type        = bool
+  default     = false
+}
 
-# Fix I1: VPC Peering variable removed - not required for PSC architecture
-# Cloud Run uses Serverless NEG for direct PSC connectivity to load balancer
-# VPC Peering only needed for GKE/VM backends (future feature)
-
-# variable "enable_private_ca" {
-#   description = "If true, use the Google Managed Private CA module for the load balancer."
-#   type        = bool
-#   default     = true
-# }
-
-# variable "authorized_ca_users" {
-#   description = "List of IAM members (e.g. serviceAccount:name@project.iam.gserviceaccount.com) authorized to request certificates from the Private CA."
-#   type        = list(string)
-#   default     = []
-# }
-
-# variable "enable_billing" {
-#   description = "If true, deploy the billing budget and alert module."
-#   type        = bool
-#   default     = false
-# }
-
-# variable "enable_cdn" {
-#   description = "If set to true, the cdn module will be enabled."
-#   type        = bool
-#   default     = false
-# }
+variable "enable_cdn" {
+  description = "If set to true, the cdn module will be enabled."
+  type        = bool
+  default     = false
+}
 
 variable "enable_logging" {
   description = "If set to true, create a Cloud Logging bucket for the demo backend (NFR-001 compliance). Set to false for fast testing iterations to avoid 1-7 day bucket deletion delays."
   type        = bool
   default     = true
+}
+
+variable "allowed_https_source_ranges" {
+  description = <<-EOT
+    List of CIDR ranges allowed to access the HTTPS endpoint on the ingress VPC.
+    Defaults to Google Cloud Load Balancer IP ranges for defense-in-depth security.
+
+    Google Cloud Load Balancer IP ranges (as of 2024):
+    - 35.191.0.0/16 (health checks and proxy IPs)
+    - 130.211.0.0/22 (legacy health checks)
+
+    WARNING: Using ["0.0.0.0/0"] allows traffic from ANY IP address and relies solely
+    on WAF (Cloud Armor) for edge protection. This is acceptable for demo/testing but
+    NOT recommended for production without explicit risk acceptance.
+  EOT
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "url_map_host_rules" {
+  description = "A map of host rules for the URL map in the load balancer."
+  type = map(object({
+    hosts        = list(string)
+    path_matcher = string
+  }))
+  default = {}
+}
+
+variable "url_map_path_matchers" {
+  description = "A map of path matchers for the URL map in the load balancer."
+  type = map(object({
+    default_service = string
+    path_rules = optional(list(object({
+      paths   = list(string)
+      service = string
+    })), [])
+  }))
+  default = {}
+}
+
+# Cloudflare DNS Integration Variables
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS edit permissions"
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare zone ID for vibetics.com domain"
+  type        = string
+}
+
+variable "subdomain_name" {
+  description = "The subdomain name for the application"
+  type        = string
+  default     = "vibetics-agentportal-devtest"
+}
+
+variable "root_domain" {
+  description = "The root domain name"
+  type        = string
+  default     = "vibetics.com"
 }
