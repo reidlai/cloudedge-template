@@ -263,31 +263,6 @@ repos:
         description: Ensures go.mod and go.sum are tidy
         files: ^tests/.*\.go$
 
-  # Optional: Uncomment to enable Go linting
-  # - repo: https://github.com/golangci/golangci-lint
-  #   rev: v1.56.2
-  #   hooks:
-  #     - id: golangci-lint
-  #       name: golangci-lint
-  #       args: [--timeout=5m]
-  #       files: ^tests/.*\.go$
-
-  # ============================================================================
-  # 8. Markdown Linting (for documentation)
-  # ============================================================================
-  # NOTE: markdownlint-cli2 is a Node.js alternative that doesn't require Ruby
-  # IMPORTANT: Exclude SpecKit-managed files and AI agent instructions
-  # - .specify/, specs/, .claude/, .gemini/ - SpecKit workflow directories
-  # - CLAUDE.md, GEMINI.md - AI agent instruction files (optimized for AI, not humans)
-  # - CHANGELOG.md - Auto-generated changelog
-  - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.18.1
-    hooks:
-      - id: markdownlint-cli2
-        name: Markdownlint
-        description: Lints markdown files (excludes AI-managed files)
-        args: [--config=.markdownlint-cli2.yaml]
-        exclude: '^(\.specify/|specs/|\.claude/|\.gemini/|CLAUDE\.md|GEMINI\.md|CHANGELOG\.md)'
 
   # ============================================================================
   # 9. YAML Linting

@@ -11,3 +11,10 @@ resource "google_compute_network" "egress_vpc" {
   name                    = "${var.project_suffix}-egress-vpc"
   auto_create_subnetworks = false
 }
+
+resource "google_compute_network" "web_vpc" {
+  count                   = var.enable_web_vpc ? 1 : 0
+  project                 = var.project_id
+  name                    = "${var.project_suffix}-web-vpc"
+  auto_create_subnetworks = false
+}
