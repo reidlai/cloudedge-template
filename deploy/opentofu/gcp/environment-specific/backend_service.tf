@@ -10,7 +10,7 @@ resource "google_compute_backend_service" "demo_web_app" {
   }
 
   # Attach WAF (Cloud Armor) security policy
-  security_policy = var.enable_waf ? google_compute_security_policy.waf_policy[0].id : null
+  security_policy = var.enable_waf ? google_compute_security_policy.edge_waf_policy[0].id : null
 
   cdn_policy {
     # Enable Cloud CDN for this backend

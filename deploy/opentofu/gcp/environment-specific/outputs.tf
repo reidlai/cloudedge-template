@@ -46,7 +46,7 @@ output "egress_subnet_id" {
 
 output "load_balancer_ip" {
   description = "The public IP address of the regional load balancer."
-  value       = one(google_compute_address.regional_lb_ip[*].address)
+  value       = var.enable_dr_loadbalancer ? google_compute_global_address.lb_ip[0].address : null
 }
 
 output "web_vpc_id" {
@@ -66,5 +66,5 @@ output "vpc_connector_id" {
 
 output "waf_policy_id" {
   description = "The ID of the WAF (Cloud Armor) security policy."
-  value       = one(google_compute_security_policy.waf_policy[*].id)
+  value       = var.enable_waf ? google_compute_security_policy.edge_waf_policy[0].id : null
 }

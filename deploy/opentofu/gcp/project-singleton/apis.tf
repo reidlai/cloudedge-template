@@ -1,14 +1,16 @@
-resource "google_project_service" "privateca" {
-  project            = var.project_id
-  service            = "privateca.googleapis.com"
-  disable_on_destroy = false
-}
+# # For zero-trust internal network
+# resource "google_project_service" "privateca" {
+#  project            = var.project_id
+#  service            = "privateca.googleapis.com"
+#  disable_on_destroy = false
+# }
 
-resource "google_project_service" "certificatemanager" {
-  project            = var.project_id
-  service            = "certificatemanager.googleapis.com"
-  disable_on_destroy = false
-}
+# # Comment out temporarily due to useless at this moment
+# resource "google_project_service" "certificatemanager" {
+#   project            = var.project_id
+#   service            = "certificatemanager.googleapis.com"
+#   disable_on_destroy = false
+# }
 
 resource "google_project_service" "billingbudgets" {
   count              = var.enable_billing ? 1 : 0
@@ -17,11 +19,12 @@ resource "google_project_service" "billingbudgets" {
   disable_on_destroy = false
 }
 
-resource "google_project_service" "vpcaccess" {
-  project            = var.project_id
-  service            = "vpcaccess.googleapis.com"
-  disable_on_destroy = false
-}
+# # Comment out temporarily due to no external access needed at this moment
+# resource "google_project_service" "vpcaccess" {
+#   project            = var.project_id
+#   service            = "vpcaccess.googleapis.com"
+#   disable_on_destroy = false
+# }
 
 resource "google_project_service" "compute" {
   project            = var.project_id

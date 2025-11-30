@@ -141,6 +141,12 @@ variable "enable_logging" {
   default     = true
 }
 
+variable "enable_self_signed_cert" {
+  description = "If set to true, a self-signed TLS certificate will be created for the load balancer."
+  type        = bool
+  default     = false
+}
+
 variable "allowed_https_source_ranges" {
   description = <<-EOT
     List of CIDR ranges allowed to access the HTTPS endpoint on the ingress VPC.
@@ -194,7 +200,7 @@ variable "cloudflare_zone_id" {
 variable "subdomain_name" {
   description = "The subdomain name for the application"
   type        = string
-  default     = "vibetics-agentportal-devtest"
+  default     = "demo-web-app"
 }
 
 variable "root_domain" {

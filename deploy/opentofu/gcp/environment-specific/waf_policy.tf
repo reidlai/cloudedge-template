@@ -1,8 +1,8 @@
-resource "google_compute_security_policy" "waf_policy" {
+resource "google_compute_security_policy" "edge_waf_policy" {
   count       = var.enable_waf ? 1 : 0
   project     = var.project_id
-  name        = "${var.project_suffix}-waf-policy"
-  description = "WAF policy for Cloud Run backend protection"
+  name        = "${var.project_suffix}-edge-waf-policy"
+  description = "Edge WAF policy for load balancer - inspects encrypted traffic"
 
   # OWASP ModSecurity Core Rule Set (CRS) - SQL Injection protection
   rule {
@@ -62,6 +62,81 @@ resource "google_compute_security_policy" "waf_policy" {
       }
     }
     description = "Block remote code execution attacks"
+  }
+
+  # rule {
+  #   action      = "deny(403)"
+  #   priority    = 1005
+  #   match {
+  #     expr {
+  #       expression = "evaluatePreconfiguredWaf('csrf-v33-stable')"
+  #     }
+  #   }
+  # }
+
+  rule {
+    action      = "deny(403)"
+    description = "Block method injection attacks"
+    preview     = false
+    priority    = 1006
+
+    match {
+      expr {
+        expression = "evaluatePreconfiguredWaf('methodenforcement-v33-stable')"
+      }
+    }
+  }
+
+  # Block scanner detection attacks
+  rule {
+    action      = "deny(403)"
+    description = "Block scanner detection attacks"
+    preview     = false
+    priority    = 1007
+    match {
+      expr {
+        expression = "evaluatePreconfiguredWaf('scannerdetection-v33-stable')"
+      }
+    }
+  }
+
+  # Block protocol attacks
+  rule {
+    action      = "deny(403)"
+    description = "Block protocol attacks"
+    preview     = false
+    priority    = 1008
+    match {
+      expr {
+        expression = "evaluatePreconfiguredWaf('protocolattack-v33-stable')"
+      }
+    }
+  }
+
+  # Block session fixation attacks
+  rule {
+    action      = "deny(403)"
+    description = "Block session fixation attacks"
+    preview     = false
+    priority    = 1009
+    match {
+      expr {
+        expression = "evaluatePreconfiguredWaf('sessionfixation-v33-stable')"
+      }
+    }
+  }
+
+  # Block NodeJS attempts
+  rule {
+    action      = "deny(403)"
+    description = "Block NodeJS exploit attempts"
+    preview     = false
+    priority    = 1010
+    match {
+      expr {
+        expression = "evaluatePreconfiguredWaf('nodejs-v33-stable')"
+      }
+    }
   }
 
   # Allow legitimate traffic (default rule)
