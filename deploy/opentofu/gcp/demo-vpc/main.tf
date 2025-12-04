@@ -1,0 +1,18 @@
+terraform {
+  required_version = ">= 1.6.0"
+
+  # GCS Backend for Google Cloud Platform
+  # Configuration values are provided via backend-config.hcl (auto-generated)
+  backend "gcs" {}
+
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 4.0.0"
+    }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = ">= 4.0.0"
+    }
+  }
+}
