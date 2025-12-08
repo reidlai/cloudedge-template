@@ -1,87 +1,286 @@
-# Module Documentation
+# Deployment Structure
 
-This document details the codebase structure, module dependency graphs, and wiring summaries.
+This document describes the OpenTofu deployment structure, state management, and dependency relationships.
 
-## Module Dependency Graph
-
-The following diagram illustrates the dependencies between OpenTofu modules and how module outputs are wired to module inputs:
+## Directory Structure
 
 ```
-┌─────────────────┐
-│  Ingress VPC    │────┐
-│                 │    │ (outputs: ingress_vpc_name, ingress_vpc_id,
-│  Outputs:       │    │  ingress_subnet_name, ingress_subnet_cidr)
-│  - vpc_name     │    │
-│  - vpc_id       │    ▼
-│  - subnet_name  │  ┌──────────────┐
-│  - subnet_cidr  │  │  Firewall    │
-└─────────────────┘  │              │
-                     │  Inputs:     │
-                     │  - network_name ← ingress_vpc.ingress_vpc_name
-                     └──────────────┘
+deploy/opentofu/
+└── gcp/
+    ├── project-singleton/     # Layer 1: Project resources
+    │   ├── main.tf            # Backend config, providers
+    │   ├── project-singleton.tf  # Billing, logging, APIs
+    │   ├── variables.tf
+    │   └── outputs.tf
+    │
+    ├── demo-vpc/              # Layer 2: Application VPC
+    │   ├── main.tf            # Backend config, providers
+    │   ├── demo-vpc.tf        # VPC, Cloud Run, Internal ALB, PSC
+    │   ├── variables.tf
+    │   └── outputs.tf
+    │
+    └── core/                  # Layer 3: Ingress infrastructure
+        ├── main.tf            # Backend config, providers
+        ├── core.tf            # Ingress VPC, WAF, External LB, PSC, DNS
+        ├── variables.tf
+        └── outputs.tf
+```
 
-┌─────────────────┐    ┌──────────────────────┐
-│  Private CA     │───▶│  DR Load Balancer    │◀─────┐
-│                 │    │                      │       │
-│  Outputs:       │    │  Inputs:             │       │
-│  - cert_map_id  │───▶│  - certificate_map   ← private_ca.certificate_map_id
-│                 │    │  - default_service_id ← demo_backend.backend_service_id
-└─────────────────┘    └──────────────────────┘       │
-                                                      │
-┌─────────────────┐                                   │
-│  Demo Backend   │───────────────────────────────────┘
-│                 │
-│  Outputs:       │
-│  - backend_service_id (wired to DR Load Balancer)
-│  - backend_service_name
-│  - cloud_run_service_name
-│  - cloud_run_service_uri
-│  - serverless_neg_id
-└─────────────────┘
+## Deployment Order
 
-┌─────────────────┐
-│  GCS Bucket     │────┐
-│  (cdn_content)  │    │ (outputs: bucket.name)
-└─────────────────┘    │
-                       ▼
-                  ┌──────────────┐
-                  │     CDN      │
-                  │              │
-                  │  Inputs:     │
-                  │  - bucket_name ← google_storage_bucket.cdn_content.name
-                  │              │
-                  │  Outputs:    │
-                  │  - cdn_backend_id
-                  │  - cdn_backend_name
-                  │  - cdn_backend_self_link
-                  └──────────────┘
+Configurations must be deployed in order due to remote state dependencies:
 
-┌─────────────────┐
-│  Egress VPC     │  (for future external service connectivity)
-│                 │
-│  Outputs:       │
-│  - egress_vpc_name
-│  - egress_vpc_id
-│  - egress_subnet_name
-│  - egress_subnet_cidr
-└─────────────────┘
+```
+1. project-singleton  ─────────────────────────────────────┐
+   │                                                        │
+   │ Outputs:                                               │
+   │ - project_id                                           │
+   │ - enable_logging                                       │
+   │                                                        │
+   └──► Remote State: ${project_id}-singleton              │
+                                                            │
+2. demo-vpc  ──────────────────────────────────────────────┤
+   │                                                        │
+   │ Reads:                                                 │
+   │ - project-singleton (for enable_logging)              │
+   │                                                        │
+   │ Outputs:                                               │
+   │ - demo_web_app_psc_service_attachment_self_link       │
+   │                                                        │
+   └──► Remote State: ${project_id}-demo-vpc               │
+                                                            │
+3. core  ──────────────────────────────────────────────────┘
+   │
+   │ Reads:
+   │ - project-singleton (for enable_logging)
+   │ - demo-vpc (for psc_service_attachment_self_link)
+   │
+   └──► Remote State: ${project_id}-core
+```
 
-┌─────────────────┐
-│  WAF Policy     │  (available for backend service attachment)
-│                 │
-│  Outputs:       │
-│  - waf_policy_name
-│  - waf_policy_id
-│  - waf_policy_self_link
-└─────────────────┘
+## State Management
 
-┌─────────────────┐
-│  Billing Budget │  (monitoring & alerts)
-│                 │
-│  Outputs:       │
-│  - budget_id
-│  - budget_name
-│  - budget_amount
-│  - budget_currency
-└─────────────────┘
+Each configuration uses GCS backend with separate state files:
+
+| Configuration | State Bucket | State Prefix |
+|---------------|--------------|--------------|
+| project-singleton | `${project_id}-tfstate` | `${project_id}-singleton` |
+| demo-vpc | `${project_id}-tfstate` | `${project_id}-demo-vpc` |
+| core | `${project_id}-tfstate` | `${project_id}-core` |
+
+### Backend Configuration
+
+All configurations use the same backend pattern:
+
+```hcl
+terraform {
+  backend "gcs" {}
+}
+```
+
+Configuration is provided via `backend-config.hcl` generated by `scripts/setup-backend.sh`.
+
+### Remote State References
+
+**demo-vpc reads from project-singleton**:
+
+```hcl
+data "terraform_remote_state" "singleton" {
+  backend = "gcs"
+  config = {
+    bucket = "${local.project_id}-tfstate"
+    prefix = "${local.project_id}-environment"
+  }
+}
+```
+
+**core reads from both**:
+
+```hcl
+data "terraform_remote_state" "singleton" {
+  backend = "gcs"
+  config = {
+    bucket = "${local.project_id}-tfstate"
+    prefix = "${local.project_id}-singleton"
+  }
+}
+
+data "terraform_remote_state" "demo_vpc" {
+  backend = "gcs"
+  config = {
+    bucket = "${local.project_id}-tfstate"
+    prefix = "${local.project_id}-demo-vpc"
+  }
+}
+```
+
+## Dependency Graph
+
+```
+                    +--------------------+
+                    | project-singleton  |
+                    +--------------------+
+                    | - Billing budget   |
+                    | - Logging bucket   |
+                    | - API enablement   |
+                    +----------+---------+
+                               |
+                               | enable_logging
+                               |
+              +----------------+----------------+
+              |                                 |
+              v                                 v
+    +--------------------+            +--------------------+
+    |      demo-vpc      |            |        core        |
+    +--------------------+            +--------------------+
+    | - Web VPC          |            | - Ingress VPC      |
+    | - Cloud Run        |            | - Cloud Armor WAF  |
+    | - Internal ALB     |            | - External LB      |
+    | - PSC Producer     |            | - PSC Consumer     |
+    +---------+----------+            | - Cloudflare DNS   |
+              |                       +---------+----------+
+              |                                 |
+              | psc_service_attachment_self_link|
+              |                                 |
+              +---------------------------------+
+```
+
+## Output Wiring
+
+### project-singleton Outputs
+
+| Output | Consumers | Usage |
+|--------|-----------|-------|
+| `enable_logging` | demo-vpc, core | Determines if logging resources created |
+| `project_id` | All | Project identifier |
+| `billing_budget_id` | None | Reference only |
+
+### demo-vpc Outputs
+
+| Output | Consumers | Usage |
+|--------|-----------|-------|
+| `demo_web_app_psc_service_attachment_self_link` | core | PSC NEG target |
+
+### core Outputs
+
+| Output | Consumers | Usage |
+|--------|-----------|-------|
+| `load_balancer_ip` | External | Access endpoint |
+| `waf_policy_id` | None | Reference only |
+| `ingress_vpc_id` | None | Reference only |
+
+## Future Expansion
+
+### Additional Application VPCs
+
+To add new application backends:
+
+1. Create new configuration: `deploy/opentofu/gcp/app-vpc/`
+2. Follow demo-vpc pattern with PSC service attachment
+3. Add PSC consumer in core configuration
+4. Update URL map for routing
+
+```
+deploy/opentofu/gcp/
+├── project-singleton/
+├── demo-vpc/           # Existing
+├── app1-vpc/           # New application
+├── app2-vpc/           # New application
+└── core/               # Updated with PSC consumers
+```
+
+### Multi-Region
+
+For disaster recovery:
+
+```
+deploy/opentofu/gcp/
+├── project-singleton/
+├── demo-vpc/
+├── core/
+│
+└── regions/
+    ├── region-a/       # Primary region
+    │   └── core/
+    └── region-b/       # Secondary region
+        └── core/
+```
+
+### Multi-Cloud
+
+For AWS/Azure expansion:
+
+```
+deploy/opentofu/
+├── gcp/                # Current
+│   ├── project-singleton/
+│   ├── demo-vpc/
+│   └── core/
+├── aws/                # Future
+│   ├── account-singleton/
+│   ├── demo-vpc/
+│   └── core/
+└── azure/              # Future
+    ├── subscription-singleton/
+    ├── demo-vnet/
+    └── core/
+```
+
+## Deployment Commands
+
+### Individual Configuration Deployment
+
+```bash
+# Deploy project-singleton
+cd deploy/opentofu/gcp/project-singleton
+tofu init -backend-config=backend-config.hcl
+tofu apply
+
+# Deploy demo-vpc
+cd ../demo-vpc
+tofu init -backend-config=backend-config.hcl
+tofu apply
+
+# Deploy core
+cd ../core
+tofu init -backend-config=backend-config.hcl
+tofu apply
+```
+
+### Scripted Deployment
+
+```bash
+# Full deployment (handles order automatically)
+./scripts/deploy.sh
+
+# Teardown (reverse order)
+./scripts/teardown.sh
+```
+
+## Troubleshooting
+
+### State Lock Issues
+
+```bash
+# Force unlock (use with caution)
+tofu force-unlock <lock-id>
+```
+
+### Remote State Not Found
+
+Ensure previous configuration is deployed:
+
+```bash
+# Check state exists
+gsutil ls gs://${project_id}-tfstate/
+```
+
+### Dependency Cycle
+
+If outputs change, may need to re-apply in order:
+
+```bash
+cd project-singleton && tofu apply
+cd ../demo-vpc && tofu apply
+cd ../core && tofu apply
 ```
