@@ -16,7 +16,10 @@ terraform {
 
   # GCS Backend for Google Cloud Platform
   # Configuration values are provided via backend-config.hcl (auto-generated)
-  backend "gcs" {}
+  backend "gcs" {
+    bucket = "vibetics-cloudedge-nonprod-tfstate"
+    prefix = "vibetics-cloudedge-nonprod-core"
+  }
 
   required_providers {
     google = {
@@ -40,9 +43,4 @@ terraform {
       version = "~> 4.0"
     }
   }
-}
-
-# Cloudflare Provider Configuration
-provider "cloudflare" {
-  api_token = var.cloudflare_api_token
 }

@@ -1,3 +1,8 @@
+variable "cloudedge_github_repository" {
+  description = "The GitHub repository name for the Cloud Edge project excluding owner name"
+  type        = string
+}
+
 variable "project_suffix" {
   description = "Project suffix (nonprod or prod). Combined with cloudedge_github_repository to form project_id."
   type        = string
@@ -7,13 +12,8 @@ variable "project_suffix" {
   }
 }
 
-variable "cloudedge_github_repository" {
-  description = "The GitHub repository name for the Cloud Edge project excluding owner name"
-  type        = string
-}
-
-variable "billing_account" {
-  description = "The GCP Billing Account ID."
+variable "region" {
+  description = "The primary GCP region for regional resources."
   type        = string
 }
 
@@ -22,8 +22,8 @@ variable "project_id" {
   type        = string
 }
 
-variable "region" {
-  description = "The primary GCP region for regional resources."
+variable "billing_account_name" {
+  description = "The GCP Billing Account Name."
   type        = string
 }
 
@@ -49,41 +49,6 @@ variable "resource_tags" {
     "managed-by"     = "opentofu"
     "project-suffix" = "nonprod"
   }
-}
-
-variable "managed_ssl_domain" {
-  description = "The domain name to use for the Google-managed SSL certificate."
-  type        = string
-  default     = ""
-}
-
-variable "privateca_ca_pool_name" {
-  description = "The name of the Private CA pool."
-  type        = string
-}
-
-variable "privateca_location" {
-  description = "The location for the Private CA pool. If not provided, defaults to var.region."
-  type        = string
-  default     = ""
-}
-
-variable "enable_private_ca" {
-  description = "If true, use the Google Managed Private CA module for the load balancer."
-  type        = bool
-  default     = true
-}
-
-variable "authorized_ca_users" {
-  description = "List of IAM members (e.g. serviceAccount:name@project.iam.gserviceaccount.com) authorized to request certificates from the Private CA."
-  type        = list(string)
-  default     = []
-}
-
-variable "enable_billing" {
-  description = "If true, deploy the billing budget and alert module."
-  type        = bool
-  default     = false
 }
 
 variable "enable_logging" {

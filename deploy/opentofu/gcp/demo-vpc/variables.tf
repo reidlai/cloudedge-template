@@ -1,3 +1,7 @@
+#############
+# Variables #
+#############
+
 variable "project_suffix" {
   description = "Project suffix (nonprod or prod). Combined with cloudedge_github_repository to form project_id."
   type        = string
@@ -46,13 +50,25 @@ variable "enable_demo_web_app" {
   type        = bool
 }
 
-variable "web_vpc_cidr_range" {
+variable "web_subnet_cidr_range" {
   description = "The CIDR range for the VPC Access Connector subnet."
   type        = string
   default     = "10.0.3.0/24"
 }
 
+variable "proxy_only_subnet_cidr_range" {
+  description = "The CIDR range for the proxy-only subnet required by the Internal ALB."
+  type        = string
+  default     = "10.0.99.0/24"
+}
+
 variable "demo_web_app_image" {
   description = "Docker image for Demo Web App Cloud Run deployment"
   type        = string
+}
+
+variable "demo_web_app_port" {
+  description = "Port on which the Demo Web App listens"
+  type        = number
+  default     = 3000
 }

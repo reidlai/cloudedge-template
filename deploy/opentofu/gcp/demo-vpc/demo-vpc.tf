@@ -1,3 +1,8 @@
+
+###################
+# Local Variables #
+###################
+
 locals {
   project_suffix              = var.project_suffix
   cloudedge_github_repository = var.cloudedge_github_repository
@@ -12,12 +17,14 @@ locals {
     }
   )
 
-  enable_demo_web_app       = var.enable_demo_web_app
-  web_vpc_cidr_range        = var.web_vpc_cidr_range
-  demo_web_app_service_name = "demo-web-app"
-  demo_web_app_image        = var.demo_web_app_image
-
-  demo_web_app_neg_name = "${local.demo_web_app_service_name}-neg"
+  enable_demo_web_app                = var.enable_demo_web_app
+  demo_web_app_service_name          = "demo-web-app"
+  demo_web_app_image                 = var.demo_web_app_image
+  demo_web_app_port                  = var.demo_web_app_port
+  demo_web_app_neg_name              = "${local.demo_web_app_service_name}-neg"
+  demo_web_app_internal_backend_name = "${local.demo_web_app_service_name}-internal-backend"
+  web_subnet_cidr_range              = var.web_subnet_cidr_range
+  proxy_only_subnet_cidr_range       = var.proxy_only_subnet_cidr_range
 }
 
 provider "google" {
@@ -43,24 +50,14 @@ data "google_project" "current" {
   project_id = local.project_id
 }
 
-###############
-# Google APIs #
-###############
-
-resource "google_project_service" "run" {
-  project            = local.project_id
-  service            = "run.googleapis.com"
-  disable_on_destroy = false
-}
-
-############################
-# Web VPC for demo web app #
-############################
+###########
+# Web VPC #
+###########
 
 resource "google_compute_network" "web_vpc" {
   count                   = local.enable_demo_web_app ? 1 : 0
   project                 = local.project_id
-  name                    = "demo-web-vpc"
+  name                    = "web-vpc"
   auto_create_subnetworks = false
 }
 
@@ -68,32 +65,50 @@ resource "google_compute_network" "web_vpc" {
 # Web Subnet #
 ##############
 
-# Required for Regional Internal Application Load Balancer
-resource "google_compute_subnetwork" "proxy_only_subnet" {
-  count         = local.enable_demo_web_app ? 1 : 0
-  project       = local.project_id
-  name          = "${var.project_suffix}-alb-proxy-subnet"
-  ip_cidr_range = "10.0.99.0/24" # Choose a non-overlapping range
-  network       = google_compute_network.web_vpc[0].name
-  region        = local.region
-  # This purpose is mandatory for the ALB's proxy-only subnet
-  purpose = "REGIONAL_MANAGED_PROXY"
-  role    = "ACTIVE"
-}
-
 resource "google_compute_subnetwork" "web_subnet" {
   count                    = local.enable_demo_web_app ? 1 : 0
   project                  = local.project_id
-  name                     = "${var.project_suffix}-web-subnet"
-  ip_cidr_range            = local.web_vpc_cidr_range
-  network                  = google_compute_network.web_vpc[0].name
+  name                     = "web-subnet"
+  ip_cidr_range            = local.web_subnet_cidr_range
   region                   = local.region
-  private_ip_google_access = true # CIS GCP Foundation Benchmark 3.9 - Enable Private Google Access
+  network                  = google_compute_network.web_vpc[0].id
+  private_ip_google_access = true
 }
 
-#############
-# Cloud Run #
-#############
+
+#################################################
+# Proxy-only subnet (required for Internal ALB) #
+#############################################demo-web-app-####
+
+resource "google_compute_subnetwork" "proxy_only_subnet" {
+  count         = local.enable_demo_web_app ? 1 : 0
+  project       = local.project_id
+  name          = "demo-web-app-proxy-only-subnet"
+  ip_cidr_range = local.proxy_only_subnet_cidr_range
+  region        = local.region
+  network       = google_compute_network.web_vpc[0].id
+  purpose       = "REGIONAL_MANAGED_PROXY"
+  role          = "ACTIVE"
+}
+
+
+#########################################
+# PSC NAT subnet for Service Attachment #
+#########################################
+
+resource "google_compute_subnetwork" "psc_nat_subnet" {
+  count         = local.enable_demo_web_app ? 1 : 0
+  project       = local.project_id
+  name          = "psc-nat-subnet"
+  ip_cidr_range = "10.0.100.0/24"
+  region        = local.region
+  network       = google_compute_network.web_vpc[0].id
+  purpose       = "PRIVATE_SERVICE_CONNECT"
+}
+
+##########################
+# Demo Web App Cloud Run #
+##########################
 
 resource "google_cloud_run_v2_service" "demo_web_app" {
   count               = local.enable_demo_web_app ? 1 : 0
@@ -105,6 +120,9 @@ resource "google_cloud_run_v2_service" "demo_web_app" {
   template {
     containers {
       image = local.demo_web_app_image
+      ports {
+        container_port = local.demo_web_app_port
+      }
     }
     scaling {
       min_instance_count = 0 # Scale to zero for cost-effectiveness
@@ -129,13 +147,32 @@ resource "google_compute_region_network_endpoint_group" "demo_web_app" {
   }
 }
 
+#################################################
+# Demo Web App Backend Service for Internal ALB #
+#################################################
+
+resource "google_compute_region_backend_service" "demo_web_app_internal_backend" {
+  count                 = local.enable_demo_web_app ? 1 : 0
+  project               = local.project_id
+  name                  = local.demo_web_app_internal_backend_name
+  region                = local.region
+  protocol              = "HTTPS"
+  load_balancing_scheme = "INTERNAL_MANAGED"
+  timeout_sec           = 30
+
+  backend {
+    group           = google_compute_region_network_endpoint_group.demo_web_app[0].id
+    balancing_mode  = "UTILIZATION"
+    capacity_scaler = 1.0
+  }
+}
+
 #################
 # Cloud Run IAM #
 #################
 
 resource "google_cloud_run_v2_service_iam_member" "invoker" {
-  count = local.enable_demo_web_app ? 1 : 0
-  # FIX: Use the actual Cloud Run service name/reference
+  count    = local.enable_demo_web_app ? 1 : 0
   name     = google_cloud_run_v2_service.demo_web_app[0].name
   project  = local.project_id
   location = local.region
@@ -146,103 +183,101 @@ resource "google_cloud_run_v2_service_iam_member" "invoker" {
     google_cloud_run_v2_service.demo_web_app
   ]
 }
+
+#################################################################
+# Self-signed certificate for Internal ALB HTTPS Load Balancing #
+#################################################################
+
+resource "tls_private_key" "self_signed_cert_key" {
+  count     = local.enable_demo_web_app ? 1 : 0
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+
+resource "tls_self_signed_cert" "self_signed_cert" {
+  count             = local.enable_demo_web_app ? 1 : 0
+  private_key_pem   = tls_private_key.self_signed_cert_key[0].private_key_pem
+  is_ca_certificate = false
+
+  subject {
+    common_name  = "internal-alb.local"
+    organization = "Internal"
+  }
+
+  validity_period_hours = 8760 # 1 year
+
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+
+  dns_names = ["internal-alb.local"]
+}
+
+############################################
+# Self signed Cert Binding to Internal ALB #
+############################################
+
+resource "google_compute_region_ssl_certificate" "internal_alb_cert_binding" {
+  count       = local.enable_demo_web_app ? 1 : 0
+  project     = local.project_id
+  region      = local.region
+  name        = "internal-alb-cert-binding"
+  private_key = tls_private_key.self_signed_cert_key[0].private_key_pem
+  certificate = tls_self_signed_cert.self_signed_cert[0].cert_pem
+}
+
 ######################################
 # Internal Application Load Balancer #
 ######################################
 
-# 1. Backend Service (attaches the Serverless NEG)
-resource "google_compute_region_backend_service" "web_vpc_internal_alb" {
-  count                 = local.enable_demo_web_app ? 1 : 0
-  project               = local.project_id
-  name                  = "web-vpc-internal-alb"
-  region                = var.region
-  protocol              = "HTTP"
-  load_balancing_scheme = "INTERNAL_MANAGED"
-
-  # Reference the existing Serverless NEG
-  backend {
-    group = google_compute_region_network_endpoint_group.demo_web_app[0].id
-  }
-}
-
-# 2. URL Map (routes to the backend service)
-resource "google_compute_region_url_map" "web_vpc_internal_alb" {
+resource "google_compute_region_url_map" "internal_alb_url_map" {
   count           = local.enable_demo_web_app ? 1 : 0
   project         = local.project_id
-  name            = "web-vpc-internal-alb"
-  region          = local.region # REQUIRED for Regional ALB
-  default_service = google_compute_region_backend_service.web_vpc_internal_alb[0].id
+  name            = "internal-alb-url-map"
+  region          = local.region
+  default_service = google_compute_region_backend_service.demo_web_app_internal_backend[0].id
 }
 
-# 3. Target HTTP Proxy (sends traffic to the URL Map)
-resource "google_compute_region_target_http_proxy" "web_vpc_internal_alb" {
-  count   = local.enable_demo_web_app ? 1 : 0
-  project = local.project_id
-  # FIX: Change underscore to hyphen
-  name   = "web-vpc-internal-alb"
-  region = local.region # REQUIRED for Regional ALB
-  # Update reference to the new regional URL Map
-  url_map = google_compute_region_url_map.web_vpc_internal_alb[0].id
+resource "google_compute_region_target_https_proxy" "internal_alb_https_proxy" {
+  count            = local.enable_demo_web_app ? 1 : 0
+  project          = local.project_id
+  name             = "internal-alb-https-proxy"
+  region           = local.region
+  url_map          = google_compute_region_url_map.internal_alb_url_map[0].id
+  ssl_certificates = [google_compute_region_ssl_certificate.internal_alb_cert_binding[0].id]
 }
 
-# 4. Forwarding Rule (the internal IP endpoint)
-resource "google_compute_forwarding_rule" "web_vpc_internal_alb" {
-  count   = local.enable_demo_web_app ? 1 : 0
-  project = local.project_id
-  name    = "web-vpc-internal-alb"
-  region  = local.region
-
-  # CORRECTED: Use the client-facing subnet (web_subnet) for the IP
-  subnetwork = google_compute_subnetwork.web_subnet[0].id
-
-  network_tier          = "PREMIUM"
+resource "google_compute_forwarding_rule" "internal_alb_forwarding_rule" {
+  count                 = local.enable_demo_web_app ? 1 : 0
+  project               = local.project_id
+  name                  = "internal-alb-forwarding-rule"
+  region                = local.region
   ip_protocol           = "TCP"
   load_balancing_scheme = "INTERNAL_MANAGED"
-  target                = google_compute_region_target_http_proxy.web_vpc_internal_alb[0].id
+  port_range            = "443"
+  target                = google_compute_region_target_https_proxy.internal_alb_https_proxy[0].id
+  network               = google_compute_network.web_vpc[0].id
+  subnetwork            = google_compute_subnetwork.web_subnet[0].id
+  network_tier          = "PREMIUM"
 
-  # CORRECTED: Use a static IP address within the web_subnet CIDR range (e.g., 10.0.3.0/24)
-  ip_address = "10.0.3.10"
-  port_range = "80-80"
+  depends_on = [google_compute_subnetwork.proxy_only_subnet]
 }
 
-##################
-# Firewall Rules #
-##################
+##########################
+# PSC Service Attachment #
+##########################
 
-# Allow traffic from the Internal ALB's Proxy-Only Subnet to your backend service (Cloud Run)
-# This is crucial because the proxy IPs in this subnet are the source for traffic hitting Cloud Run.
-resource "google_compute_firewall" "allow_alb_proxy_ingress" {
-  count   = local.enable_demo_web_app ? 1 : 0
-  project = local.project_id
-  name    = "${local.project_suffix}-allow-alb-proxy-ingress"
-  network = google_compute_network.web_vpc[0].name
+resource "google_compute_service_attachment" "demo_web_app_psc_attachment" {
+  count                 = local.enable_demo_web_app ? 1 : 0
+  project               = local.project_id
+  name                  = "demo-web-app-psc-attachment"
+  region                = local.region
+  connection_preference = "ACCEPT_AUTOMATIC"
 
-  allow {
-    protocol = "tcp"
-    ports    = ["80"] # Assuming your Cloud Run service listens on port 80
-  }
+  nat_subnets    = [google_compute_subnetwork.psc_nat_subnet[0].id]
+  target_service = google_compute_forwarding_rule.internal_alb_forwarding_rule[0].id
 
-  source_ranges = [google_compute_subnetwork.proxy_only_subnet[0].ip_cidr_range]
-  direction     = "INGRESS"
-  priority      = 900
-}
-
-# Allow internal traffic from client subnets (e.g., client VMs in the shared VPC)
-# to the Internal ALB's frontend IP (10.0.3.10)
-resource "google_compute_firewall" "allow_client_ingress_to_alb" {
-  count   = local.enable_demo_web_app ? 1 : 0
-  project = local.project_id
-  name    = "${local.project_suffix}-allow-client-alb"
-  network = google_compute_network.web_vpc[0].name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["80"] # ALB listens on port 80
-  }
-
-  # CORRECTED: Use the CIDR block of the client-facing subnet
-  source_ranges = [google_compute_subnetwork.web_subnet[0].ip_cidr_range]
-
-  direction = "INGRESS"
-  priority  = 950
+  enable_proxy_protocol = false
 }

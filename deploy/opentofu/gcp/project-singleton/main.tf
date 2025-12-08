@@ -3,7 +3,10 @@ terraform {
 
   # GCS Backend for Google Cloud Platform
   # Configuration values are provided via backend-config.hcl (auto-generated)
-  backend "gcs" {}
+  backend "gcs" {
+    bucket = "vibetics-cloudedge-nonprod-tfstate"
+    prefix = "vibetics-cloudedge-nonprod-singleton"
+  }
 
   required_providers {
     google = {
@@ -23,9 +26,4 @@ terraform {
       version = "~> 3.0"
     }
   }
-}
-
-# Get Project Number for Service Agent
-data "google_project" "current" {
-  project_id = var.project_id
 }
