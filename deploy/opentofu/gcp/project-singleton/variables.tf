@@ -15,6 +15,7 @@ variable "project_suffix" {
 variable "region" {
   description = "The primary GCP region for regional resources."
   type        = string
+  default     = "northamerica-northeast2"
 }
 
 variable "project_id" {
@@ -55,4 +56,29 @@ variable "enable_logging" {
   description = "If set to true, create a Cloud Logging bucket for the demo backend (NFR-001 compliance). Set to false for fast testing iterations to avoid 1-7 day bucket deletion delays."
   type        = bool
   default     = true
+}
+
+variable "enable_self_signed_cert" {
+  description = "If true, a self-signed TLS certificate will be created instead of using ACME."
+  type        = bool
+  default     = false
+}
+
+variable "demo_web_app_subdomain_name" {
+  description = "The subdomain name for the application"
+  type        = string
+  default     = "demo-web-app"
+}
+
+variable "root_domain" {
+  description = "The root domain name"
+  type        = string
+  default     = "vibetics.com"
+}
+
+# Cloudflare DNS Integration Variables
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS edit permissions"
+  type        = string
+  sensitive   = true
 }

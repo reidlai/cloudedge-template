@@ -23,10 +23,6 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 4.0.0"
     }
-    tls = {
-      source  = "hashicorp/tls"
-      version = ">= 4.0.0"
-    }
     random = {
       source  = "hashicorp/random"
       version = "~> 3.0"
@@ -37,6 +33,10 @@ terraform {
     }
     cloudflare = {
       source  = "cloudflare/cloudflare"
+      version = "~> 4.0"
+    }
+    tls = {
+      source  = "hashicorp/tls"
       version = "~> 4.0"
     }
   }

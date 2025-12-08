@@ -1,6 +1,6 @@
 # Vibetics CloudEdge
 
-Cloud-agnostic edge infrastructure managed by OpenTofu, providing secure ingress with WAF, load balancing, and Private Service Connect (PSC) connectivity for backend applications.
+Cloud-agnostic edge infrastructure managed by OpenTofu, providing secure ingress with optional WAF, load balancing, and Private Service Connect (PSC) connectivity for backend applications.
 
 ## Overview
 
@@ -8,11 +8,12 @@ Vibetics CloudEdge provides a **modular secure baseline infrastructure** for dep
 
 **What This Project Provides** (Infrastructure-Only):
 
-- Edge security with Cloud Armor WAF (OWASP CRS rules)
+- **Flexible Edge Security**: Choose between Cloudflare WAF (free) or GCP Cloud Armor (paid)
 - Regional HTTPS Load Balancer with SSL termination
+- Cloudflare Origin CA certificates or Google-managed certificates
 - Private Service Connect (PSC) for cross-VPC connectivity
-- Ingress VPC with firewall rules
-- Cloudflare DNS integration
+- Ingress VPC with dynamic firewall rules (Cloudflare IPs or custom ranges)
+- Cloudflare DNS integration with proxy support
 - Billing budget monitoring
 
 **What This Project Does NOT Provide** (Application Responsibility):
@@ -23,35 +24,40 @@ Vibetics CloudEdge provides a **modular secure baseline infrastructure** for dep
 
 ## Architecture
 
+### Current Implementation: Cloudflare Edge + Private Service Connect
+
 ```
                             INTERNET
                                |
                     +----------v----------+
-                    |   Cloudflare DNS    |
-                    | demo-web-app.domain |
+                    |   Cloudflare Proxy  |
+                    |  (proxied = true)   |
+                    |   - Free WAF/DDoS   |
+                    |   - Free SSL/TLS    |
+                    |   - Global CDN      |
                     +----------+----------+
+                               |
+                   Cloudflare Origin Certificate
                                |
 +------------------------------v-------------------------------+
 |                    CORE CONFIGURATION                        |
 |                    deploy/opentofu/gcp/core                  |
 |                                                              |
-|  +------------------+    +--------------------+              |
-|  | Regional Static  |    |  Cloud Armor WAF   |              |
-|  | External IP      |--->|  - SQLi protection |              |
-|  +------------------+    |  - XSS protection  |              |
-|                          |  - RCE protection  |              |
-|                          |  - Scanner detect  |              |
-|                          +----------+---------+              |
-|                                     |                        |
-|  +----------------------------------v---------------------+  |
+|  +------------------+                                        |
+|  | Regional Static  |                                        |
+|  | External IP      |                                        |
+|  +------------------+                                        |
+|                                                              |
+|  +--------------------------------------------------------+  |
 |  |           Regional External HTTPS Load Balancer       |  |
-|  |  +----------------+  +------------------+              |  |
-|  |  | SSL Cert       |  | URL Map          |              |  |
-|  |  | (Self-signed)  |  | (Backend routing)|              |  |
-|  |  +----------------+  +------------------+              |  |
-|  +----------------------------------+---------------------+  |
-|                                     |                        |
-|  +----------------------------------v---------------------+  |
+|  |  +------------------+    +-------------------------+  |  |
+|  |  | Cloudflare       |    | URL Map                 |  |  |
+|  |  | Origin Cert      |    | (Backend routing)       |  |  |
+|  |  | (15-year)        |    |                         |  |  |
+|  |  +------------------+    +-------------------------+  |  |
+|  +--------------------------------------------------------+  |
+|                                                              |
+|  +--------------------------------------------------------+  |
 |  |                    Ingress VPC                         |  |
 |  |  +------------------+    +------------------------+    |  |
 |  |  | Ingress Subnet   |    | Proxy-Only Subnet      |    |  |
@@ -59,7 +65,7 @@ Vibetics CloudEdge provides a **modular secure baseline infrastructure** for dep
 |  |  +------------------+    +------------------------+    |  |
 |  |                                                        |  |
 |  |  +--------------------------------------------------+  |  |
-|  |  | Firewall: Allow HTTPS from configured sources   |  |  |
+|  |  | Firewall: HTTPS from Cloudflare IPs only        |  |  |
 |  |  +--------------------------------------------------+  |  |
 |  +--------------------------------------------------------+  |
 |                                     |                        |
@@ -112,6 +118,59 @@ Vibetics CloudEdge provides a **modular secure baseline infrastructure** for dep
 +--------------------------------------------------------------+
 ```
 
+## Architecture Options
+
+This infrastructure supports **three security configurations** via feature flags:
+
+### Option A: Cloudflare Edge (Default - Free)
+**Configuration:**
+```hcl
+enable_cloudflare_proxy = true   # Cloudflare proxy (orange cloud)
+enable_waf              = false  # No Cloud Armor cost
+```
+
+**Security Layers:**
+- ✅ Cloudflare WAF (OWASP Top 10 protection)
+- ✅ Cloudflare DDoS protection
+- ✅ Cloudflare SSL/TLS
+- ✅ Origin IP hidden by Cloudflare
+- ✅ Firewall restricted to Cloudflare IPs only
+- ✅ Cloud Run ingress policy (internal only)
+- ✅ PSC private connectivity
+
+**Cost:** $0/month for WAF
+
+### Option B: GCP Edge
+**Configuration:**
+```hcl
+enable_cloudflare_proxy = false  # Direct DNS resolution
+enable_waf              = true   # GCP Cloud Armor enabled
+```
+
+**Security Layers:**
+- ✅ GCP Cloud Armor WAF (10 OWASP ModSecurity rules)
+- ✅ Configurable firewall rules
+- ✅ Google-managed or self-signed SSL
+- ✅ Cloud Run ingress policy (internal only)
+- ✅ PSC private connectivity
+
+**Cost:** $16-91/month (policy + rules + requests)
+
+### Option C: Defense-in-Depth (Hybrid)
+**Configuration:**
+```hcl
+enable_cloudflare_proxy = true   # Cloudflare as first layer
+enable_waf              = true   # Cloud Armor as second layer
+```
+
+**Security Layers:**
+- ✅ Cloudflare WAF (Layer 1 - Edge)
+- ✅ GCP Cloud Armor WAF (Layer 2 - Origin)
+- ✅ Both Cloudflare and GCP DDoS protection
+- ✅ All other security layers
+
+**Cost:** $16-91/month for Cloud Armor (Cloudflare WAF is free)
+
 ## Deployment Structure
 
 The infrastructure is organized into three OpenTofu configurations that must be deployed in order:
@@ -120,7 +179,7 @@ The infrastructure is organized into three OpenTofu configurations that must be 
 deploy/opentofu/gcp/
 ├── project-singleton/    # 1. Project-level resources (deploy first)
 │   ├── main.tf          #    Backend config, providers
-│   ├── project-singleton.tf  # Billing, logging, APIs
+│   ├── project-singleton.tf  # Billing, logging, APIs, SSL certs
 │   ├── variables.tf
 │   └── outputs.tf
 │
@@ -132,14 +191,14 @@ deploy/opentofu/gcp/
 │
 └── core/                # 3. Core ingress infrastructure (deploy last)
     ├── main.tf          #    Backend config, providers
-    ├── core.tf          #    Ingress VPC, WAF, External LB, PSC consumer, DNS
+    ├── core.tf          #    Ingress VPC, WAF (optional), External LB, PSC consumer, DNS
     ├── variables.tf
     └── outputs.tf
 ```
 
 **Deployment Order Dependency**:
 
-1. `project-singleton` - Creates project-level resources, outputs read by other configs
+1. `project-singleton` - Creates project-level resources, SSL certificates, outputs read by other configs
 2. `demo-vpc` - Creates backend VPC and PSC service attachment, outputs service attachment ID
 3. `core` - Creates ingress VPC and PSC consumer that connects to demo-vpc
 
@@ -152,6 +211,7 @@ For detailed prerequisites and troubleshooting, see [docs/QUICKSTART.md](docs/QU
 - OpenTofu >= 1.6.0
 - GCP project with billing enabled
 - Cloudflare account with DNS zone
+- Cloudflare Origin CA Key (for Cloudflare proxy mode)
 - Required GCP APIs enabled (see QUICKSTART.md)
 
 ### Deploy
@@ -163,12 +223,23 @@ cd vibetics-cloudedge
 cp .env.example .env
 # Edit .env with your project settings
 
-# 2. Source environment
+# 2. Set Cloudflare Origin CA Key (if using Cloudflare proxy)
+export TF_VAR_cloudflare_origin_ca_key="your-origin-ca-key"
+
+# 3. Source environment
 source .env
 
-# 3. Deploy in order
+# 4. Deploy in order
 ./scripts/deploy.sh
 ```
+
+### Configure Cloudflare SSL Mode (if using Cloudflare proxy)
+
+After deployment, manually configure Cloudflare SSL/TLS:
+
+1. Go to: https://dash.cloudflare.com/ → Your domain → **SSL/TLS** → **Overview**
+2. Set encryption mode to: **"Full (strict)"**
+3. This ensures encrypted connection between Cloudflare and GCP origin
 
 ### Teardown
 
@@ -180,7 +251,7 @@ source .env
 
 | Document | Description |
 |----------|-------------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Detailed architecture, PSC patterns, future roadmap |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Detailed architecture, PSC patterns, WAF options, future roadmap |
 | [docs/GCP.md](docs/GCP.md) | GCP resource reference by configuration |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Variables, feature flags, environment setup |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Prerequisites, IAM setup, deployment guide |
@@ -193,15 +264,60 @@ source .env
 
 This infrastructure implements defense-in-depth with multiple security layers:
 
+### Default Configuration (Cloudflare Edge)
+
 | Layer | Component | Protection |
 |-------|-----------|------------|
-| Edge | Cloud Armor WAF | SQLi, XSS, RCE, LFI, RFI, scanner detection |
-| Network | Ingress VPC Firewall | Source IP restriction (configurable) |
-| Transport | SSL/TLS | Encryption in transit |
+| Edge | Cloudflare WAF | SQLi, XSS, DDoS, OWASP Top 10 |
+| Network | Ingress VPC Firewall | Cloudflare IP ranges only |
+| Transport | SSL/TLS | Cloudflare Origin Certificate (15-year) |
 | Backend | Cloud Run Ingress Policy | Internal load balancer traffic only |
 | Connectivity | Private Service Connect | No public IP exposure for backends |
 
+### Optional GCP Cloud Armor (enable_waf = true)
+
+| Priority | Rule | Protection |
+|----------|------|------------|
+| 1000 | sqli-v33-stable | SQL injection |
+| 1001 | xss-v33-stable | Cross-site scripting |
+| 1002 | lfi-v33-stable | Local file inclusion |
+| 1003 | rfi-v33-stable | Remote file inclusion |
+| 1004 | rce-v33-stable | Remote code execution |
+| 1006 | methodenforcement-v33-stable | HTTP method attacks |
+| 1007 | scannerdetection-v33-stable | Scanner/bot detection |
+| 1008 | protocolattack-v33-stable | Protocol attacks |
+| 1009 | sessionfixation-v33-stable | Session fixation |
+| 1010 | nodejs-v33-stable | Node.js exploits |
+
 For detailed security documentation, see [docs/SECURITY.md](docs/SECURITY.md).
+
+## Cost Optimization
+
+### Current Implementation (Cloudflare Edge)
+- **WAF:** $0/month (Cloudflare free tier)
+- **DDoS Protection:** $0/month (Cloudflare free tier)
+- **SSL Certificates:** $0/month (Cloudflare Origin CA)
+- **Load Balancer:** ~$18/month (forwarding rule)
+- **Regional IP:** ~$5/month (Standard tier)
+- **Total:** ~$23/month
+
+### With Cloud Armor (Defense-in-Depth)
+- **Additional Cost:** $16-91/month
+  - Security policy: $5/month
+  - WAF rules (11): $11/month
+  - Requests: $0.75 per million requests
+
+## Feature Flags
+
+The architecture supports flexible configuration via feature flags:
+
+| Flag | Default | Purpose | Impact |
+|------|---------|---------|--------|
+| `enable_cloudflare_proxy` | `true` | Enable Cloudflare proxy | Free WAF, DDoS, hides origin IP |
+| `enable_waf` | `false` | Enable GCP Cloud Armor | $16-91/month additional cost |
+| `enable_demo_web_app` | varies | Deploy demo app | Creates all backend resources |
+| `enable_logging` | `true` | Centralized logging | 30-day retention |
+| `enable_self_signed_cert` | `false` | Use self-signed certs | For testing only |
 
 ## Future Expansion
 
@@ -210,7 +326,7 @@ The architecture supports planned expansion:
 - **Multi-Cloud**: AWS and Azure modules (directory structure ready)
 - **Multi-Backend**: Additional application VPCs with PSC attachments
 - **Multi-Region**: DR with failover load balancing
-- **Production Certificates**: Google-managed or custom certificates
+- **Advanced Routing**: Host/path-based routing for multiple services
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the roadmap.
 

@@ -19,7 +19,11 @@ locals {
   )
   enable_logging = var.enable_logging
 
-  host_project_id = "vibetics-shared-${local.project_suffix}"
+  host_project_id             = "vibetics-shared-${local.project_suffix}"
+  enable_self_signed_cert     = var.enable_self_signed_cert
+  demo_web_app_subdomain_name = var.demo_web_app_subdomain_name
+  root_domain                 = var.root_domain
+  cloudflare_api_token        = var.cloudflare_api_token
 }
 
 provider "google" {
@@ -37,6 +41,12 @@ provider "google-beta" {
 
   user_project_override = true
   billing_project       = local.project_id
+}
+
+provider "acme" {
+  # "https://acme-staging-v02.api.letsencrypt.org/directory" for testing (avoids rate limits)
+  # "https://acme-v02.api.letsencrypt.org/directory" for production
+  server_url = "https://acme-v02.api.letsencrypt.org/directory"
 }
 
 data "google_billing_account" "billing_account" {
@@ -118,7 +128,7 @@ resource "google_billing_budget" "budget" {
 resource "google_logging_project_bucket_config" "logs_bucket" {
   count          = local.enable_logging ? 1 : 0
   project        = local.project_id
-  location       = "global"
+  location       = local.region
   retention_days = 30 # NFR-001: 30-day trace data retention
   bucket_id      = "${local.project_id}-logs"
   description    = "30-day retention bucket for demo backend service logs (NFR-001 compliance)"
@@ -126,4 +136,60 @@ resource "google_logging_project_bucket_config" "logs_bucket" {
   depends_on = [
     google_project_service.logging
   ]
+}
+
+############
+# SSL Cert #
+############
+
+resource "tls_private_key" "self_signed_key" {
+  count     = local.enable_self_signed_cert ? 1 : 0
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+
+resource "tls_self_signed_cert" "self_signed_cert" {
+  count             = local.enable_self_signed_cert ? 1 : 0
+  private_key_pem   = tls_private_key.self_signed_key[0].private_key_pem
+  is_ca_certificate = true
+
+  subject {
+    common_name  = "${local.demo_web_app_subdomain_name}.${local.root_domain}"
+    organization = "Demo"
+  }
+
+  validity_period_hours = 8760 # 1 year
+
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+
+  dns_names = ["${local.demo_web_app_subdomain_name}.${local.root_domain}"]
+}
+
+resource "google_compute_region_ssl_certificate" "external_https_lb_cert" {
+  count       = local.enable_self_signed_cert ? 1 : 0
+  provider    = google-beta
+  project     = local.project_id
+  region      = local.region
+  name        = "external-https-lb-cert-${local.demo_web_app_subdomain_name}"
+  private_key = local.enable_self_signed_cert ? tls_private_key.self_signed_key[0].private_key_pem : null
+  certificate = local.enable_self_signed_cert ? tls_self_signed_cert.self_signed_cert[0].cert_pem : null
+
+}
+
+resource "google_compute_managed_ssl_certificate" "external_https_lb_cert" {
+  count    = local.enable_self_signed_cert ? 0 : 1
+  provider = google-beta
+  project  = local.project_id
+  name     = "external-https-lb-cert-${local.demo_web_app_subdomain_name}"
+  managed {
+    domains = ["${local.demo_web_app_subdomain_name}.${local.root_domain}"]
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }

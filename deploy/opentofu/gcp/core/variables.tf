@@ -101,6 +101,13 @@ variable "cloudflare_api_token" {
   sensitive   = true
 }
 
+variable "cloudflare_origin_ca_key" {
+  description = "Cloudflare Origin CA Key for creating origin certificates. Optional - only needed when enable_cloudflare_proxy is true."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "cloudflare_zone_id" {
   description = "Cloudflare zone ID for vibetics.com domain"
   type        = string
@@ -121,4 +128,22 @@ variable "proxy_only_subnet_cidr_range" {
   description = "The CIDR range for the proxy-only subnet required by Regional External ALB."
   type        = string
   default     = "10.0.98.0/24"
+}
+
+variable "enable_self_signed_cert" {
+  description = "If true, a self-signed TLS certificate will be created instead of using ACME."
+  type        = bool
+  default     = false
+}
+
+variable "enable_waf" {
+  description = "If true, GCP Cloud Armor WAF policies will be created and attached to backend services. If false, relies on Cloudflare WAF for protection."
+  type        = bool
+  default     = false
+}
+
+variable "enable_cloudflare_proxy" {
+  description = "If true, Cloudflare proxy will be enabled (orange cloud) for DNS records, providing Cloudflare WAF, DDoS protection, and SSL. If false, DNS resolves directly to GCP load balancer."
+  type        = bool
+  default     = true
 }

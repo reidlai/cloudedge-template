@@ -27,6 +27,30 @@ locals {
   enable_demo_web_app          = var.enable_demo_web_app
   allowed_https_source_ranges  = var.allowed_https_source_ranges
   proxy_only_subnet_cidr_range = var.proxy_only_subnet_cidr_range
+  enable_self_signed_cert      = var.enable_self_signed_cert
+  enable_waf                   = var.enable_waf
+  enable_cloudflare_proxy      = var.enable_cloudflare_proxy
+  cloudflare_origin_ca_key     = var.cloudflare_origin_ca_key
+
+  # Cloudflare IP ranges for firewall when proxy is enabled
+  # Source: https://www.cloudflare.com/ips/
+  cloudflare_ipv4_ranges = [
+    "173.245.48.0/20",
+    "103.21.244.0/22",
+    "103.22.200.0/22",
+    "103.31.4.0/22",
+    "141.101.64.0/18",
+    "108.162.192.0/18",
+    "190.93.240.0/20",
+    "188.114.96.0/20",
+    "197.234.240.0/22",
+    "198.41.128.0/17",
+    "162.158.0.0/15",
+    "104.16.0.0/13",
+    "104.24.0.0/14",
+    "172.64.0.0/13",
+    "131.0.72.0/22"
+  ]
 
 }
 
@@ -49,6 +73,13 @@ provider "cloudflare" {
   api_token = local.cloudflare_api_token
 }
 
+# Cloudflare Provider for Origin CA operations (uses Origin CA Key)
+provider "cloudflare" {
+  alias                = "origin_ca"
+  api_token            = local.cloudflare_api_token
+  api_user_service_key = local.cloudflare_origin_ca_key != "" ? local.cloudflare_origin_ca_key : null
+}
+
 ################
 # Data Sources #
 ################
@@ -62,6 +93,7 @@ data "terraform_remote_state" "singleton" {
 }
 
 data "terraform_remote_state" "demo_vpc" {
+  count   = local.enable_demo_web_app ? 1 : 0
   backend = "gcs"
   config = {
     bucket = "${local.project_id}-tfstate"
@@ -111,7 +143,7 @@ resource "cloudflare_record" "demo_web_app_subdomain_a" {
   name    = local.demo_web_app_subdomain_name
   content = google_compute_address.external_lb_ip.address
   type    = "A"
-  ttl     = 120
+  ttl     = local.enable_cloudflare_proxy ? 1 : 120 # TTL=1 means 'automatic' when proxied
   # Setting proxied = true is the recommended choice for A, AAAA, and CNAME records that serve web traffic (HTTP/HTTPS).
   #
   # | Behavior       | Description                                                                                                                                                                  |
@@ -120,22 +152,77 @@ resource "cloudflare_record" "demo_web_app_subdomain_a" {
   # | Security       | Cloudflare acts as a reverse proxy, shielding your origin server's true IP address from attackers and providing protection against DDoS attacks and other malicious traffic. |
   # | Performance    | Traffic is routed through Cloudflare's global network, benefiting from: CDN caching, Brotli compression, and other performance optimizations.                                |
   # | Features       | Enables Cloudflare services like WAF (Web Application Firewall), SSL/TLS encryption, Page Rules, and detailed analytics.                                                     |
-  # | TTL            | The Time To Live (TTL) is fixed to Auto (300 seconds) and cannot be customized.                                                                                              |
+  # | TTL            | The Time To Live (TTL) is fixed to Auto (300 seconds) and cannot be customized when proxied=true.                                                                            |
   #
-  proxied = false # Direct routing to load balancer (no Cloudflare proxy)
+  proxied = local.enable_cloudflare_proxy # Enable Cloudflare proxy (orange cloud) based on variable
+}
+
+#################################
+# Cloudflare Origin Certificate #
+#################################
+
+# Generate private key for Cloudflare origin certificate
+resource "tls_private_key" "cloudflare_origin_key" {
+  count     = local.enable_cloudflare_proxy ? 1 : 0
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+
+# Generate CSR for Cloudflare origin certificate
+resource "tls_cert_request" "cloudflare_origin_csr" {
+  count           = local.enable_cloudflare_proxy ? 1 : 0
+  private_key_pem = tls_private_key.cloudflare_origin_key[0].private_key_pem
+
+  subject {
+    common_name  = "${local.demo_web_app_subdomain_name}.${local.root_domain}"
+    organization = "Vibetics"
+  }
+
+  dns_names = [
+    "${local.demo_web_app_subdomain_name}.${local.root_domain}"
+  ]
+}
+
+# Cloudflare origin certificate for Cloudflare-to-GCP connection
+# This is used when Cloudflare proxy is enabled and we need a certificate
+# for the encrypted connection between Cloudflare and the GCP load balancer
+resource "cloudflare_origin_ca_certificate" "origin_cert" {
+  provider           = cloudflare.origin_ca
+  count              = local.enable_cloudflare_proxy ? 1 : 0
+  csr                = tls_cert_request.cloudflare_origin_csr[0].cert_request_pem
+  hostnames          = ["${local.demo_web_app_subdomain_name}.${local.root_domain}"]
+  request_type       = "origin-rsa"
+  requested_validity = 5475 # 15 years (max allowed)
+}
+
+# Upload Cloudflare origin certificate to GCP as a regional SSL certificate
+resource "google_compute_region_ssl_certificate" "cloudflare_origin_cert" {
+  count       = local.enable_cloudflare_proxy ? 1 : 0
+  provider    = google-beta
+  project     = local.project_id
+  region      = local.region
+  name        = "cloudflare-origin-cert-${local.demo_web_app_subdomain_name}"
+  private_key = tls_private_key.cloudflare_origin_key[0].private_key_pem
+  certificate = cloudflare_origin_ca_certificate.origin_cert[0].certificate
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 ###########################
 # Cloud Edge WAF Policies #
 ###########################
 
-resource "google_compute_security_policy" "edge_waf_policy" {
+resource "google_compute_region_security_policy" "edge_waf_policy" {
+  count       = local.enable_waf ? 1 : 0
   project     = local.project_id
+  region      = local.region
   name        = "edge-waf-policy"
-  description = "Edge WAF policy for load balancer - inspects encrypted traffic"
+  description = "Edge WAF policy for regional load balancer - inspects encrypted traffic"
 
   # OWASP ModSecurity Core Rule Set (CRS) - SQL Injection protection
-  rule {
+  rules {
     action   = "deny(403)"
     priority = 1000
     match {
@@ -147,7 +234,7 @@ resource "google_compute_security_policy" "edge_waf_policy" {
   }
 
   # OWASP ModSecurity Core Rule Set (CRS) - XSS protection
-  rule {
+  rules {
     action   = "deny(403)"
     priority = 1001
     match {
@@ -159,7 +246,7 @@ resource "google_compute_security_policy" "edge_waf_policy" {
   }
 
   # OWASP ModSecurity Core Rule Set (CRS) - Local File Inclusion protection
-  rule {
+  rules {
     action   = "deny(403)"
     priority = 1002
     match {
@@ -171,7 +258,7 @@ resource "google_compute_security_policy" "edge_waf_policy" {
   }
 
   # OWASP ModSecurity Core Rule Set (CRS) - Remote File Inclusion protection
-  rule {
+  rules {
     action   = "deny(403)"
     priority = 1003
     match {
@@ -183,7 +270,7 @@ resource "google_compute_security_policy" "edge_waf_policy" {
   }
 
   # OWASP ModSecurity Core Rule Set (CRS) - Remote Code Execution protection
-  rule {
+  rules {
     action   = "deny(403)"
     priority = 1004
     match {
@@ -194,7 +281,7 @@ resource "google_compute_security_policy" "edge_waf_policy" {
     description = "Block remote code execution attacks"
   }
 
-  # rule {
+  # rules {
   #   action      = "deny(403)"
   #   priority    = 1005
   #   match {
@@ -204,7 +291,7 @@ resource "google_compute_security_policy" "edge_waf_policy" {
   #   }
   # }
 
-  rule {
+  rules {
     action      = "deny(403)"
     description = "Block method injection attacks"
     preview     = false
@@ -218,7 +305,7 @@ resource "google_compute_security_policy" "edge_waf_policy" {
   }
 
   # Block scanner detection attacks
-  rule {
+  rules {
     action      = "deny(403)"
     description = "Block scanner detection attacks"
     preview     = false
@@ -231,7 +318,7 @@ resource "google_compute_security_policy" "edge_waf_policy" {
   }
 
   # Block protocol attacks
-  rule {
+  rules {
     action      = "deny(403)"
     description = "Block protocol attacks"
     preview     = false
@@ -244,7 +331,7 @@ resource "google_compute_security_policy" "edge_waf_policy" {
   }
 
   # Block session fixation attacks
-  rule {
+  rules {
     action      = "deny(403)"
     description = "Block session fixation attacks"
     preview     = false
@@ -257,7 +344,7 @@ resource "google_compute_security_policy" "edge_waf_policy" {
   }
 
   # Block NodeJS attempts
-  rule {
+  rules {
     action      = "deny(403)"
     description = "Block NodeJS exploit attempts"
     preview     = false
@@ -270,7 +357,7 @@ resource "google_compute_security_policy" "edge_waf_policy" {
   }
 
   # Allow legitimate traffic (default rule)
-  rule {
+  rules {
     action   = "allow"
     priority = 2147483647
     match {
@@ -281,45 +368,6 @@ resource "google_compute_security_policy" "edge_waf_policy" {
     }
     description = "Default rule - allow all other traffic"
   }
-
-  labels = var.resource_tags
-}
-
-############
-# SSL Cert #
-############
-
-resource "tls_private_key" "self_signed_key" {
-  algorithm = "RSA"
-  rsa_bits  = 2048
-}
-
-resource "tls_self_signed_cert" "self_signed_cert" {
-  private_key_pem   = tls_private_key.self_signed_key.private_key_pem
-  is_ca_certificate = true
-
-  subject {
-    common_name  = "${local.demo_web_app_subdomain_name}.${local.root_domain}"
-    organization = "Demo"
-  }
-
-  validity_period_hours = 8760 # 1 year
-
-  allowed_uses = [
-    "key_encipherment",
-    "digital_signature",
-    "server_auth",
-  ]
-
-  dns_names = ["${local.demo_web_app_subdomain_name}.${local.root_domain}"]
-}
-
-resource "google_compute_region_ssl_certificate" "external_https_lb_cert_binding" {
-  project     = local.project_id
-  region      = local.region
-  name        = "external-https-lb-cert-binding"
-  private_key = tls_private_key.self_signed_key.private_key_pem
-  certificate = tls_self_signed_cert.self_signed_cert.cert_pem
 }
 
 ################
@@ -374,10 +422,10 @@ resource "google_compute_firewall" "allow_ingress_vpc_https_ingress" {
     ports    = ["443"]
   }
 
-  # SECURITY FIX (S1): Restrict to Google Cloud Load Balancer IP ranges by default
+  # SECURITY: When Cloudflare proxy is enabled, restrict to Cloudflare IP ranges only
+  # When Cloudflare proxy is disabled, use configured allowed_https_source_ranges
   # This provides defense-in-depth beyond WAF and Cloud Run ingress policy
-  # Override with ["0.0.0.0/0"] via var.allowed_https_source_ranges if needed for testing
-  source_ranges = local.allowed_https_source_ranges
+  source_ranges = local.enable_cloudflare_proxy ? local.cloudflare_ipv4_ranges : local.allowed_https_source_ranges
   direction     = "INGRESS"
   priority      = 1000
 }
@@ -392,7 +440,7 @@ resource "google_compute_region_network_endpoint_group" "demo_web_app_psc_neg" {
   name                  = "demo-web-app-psc-neg"
   region                = local.region
   network_endpoint_type = "PRIVATE_SERVICE_CONNECT"
-  psc_target_service    = data.terraform_remote_state.demo_vpc.outputs.demo_web_app_psc_service_attachment_self_link
+  psc_target_service    = data.terraform_remote_state.demo_vpc[0].outputs.demo_web_app_psc_service_attachment_self_link
 
   network    = google_compute_network.ingress_vpc.id
   subnetwork = google_compute_subnetwork.ingress_subnet.id
@@ -412,7 +460,7 @@ resource "google_compute_region_backend_service" "demo_web_app_external_backend"
   timeout_sec           = 30
   load_balancing_scheme = "EXTERNAL_MANAGED"
 
-  security_policy = google_compute_security_policy.edge_waf_policy.id
+  security_policy = local.enable_waf ? google_compute_region_security_policy.edge_waf_policy[0].id : null
 
   backend {
     group           = google_compute_region_network_endpoint_group.demo_web_app_psc_neg[0].id
@@ -434,11 +482,14 @@ resource "google_compute_region_url_map" "external_https_lb" {
 
 # HTTPS Proxy
 resource "google_compute_region_target_https_proxy" "external_https_lb" {
-  project          = local.project_id
-  region           = local.region
-  name             = "external-https-lb-proxy"
-  url_map          = google_compute_region_url_map.external_https_lb.id
-  ssl_certificates = [google_compute_region_ssl_certificate.external_https_lb_cert_binding.id]
+  project = local.project_id
+  region  = local.region
+  name    = "external-https-lb-proxy"
+  url_map = google_compute_region_url_map.external_https_lb.id
+  # Use Cloudflare origin cert when proxy is enabled, otherwise use self-signed or managed cert from singleton
+  ssl_certificates = [
+    local.enable_cloudflare_proxy ? google_compute_region_ssl_certificate.cloudflare_origin_cert[0].id : data.terraform_remote_state.singleton.outputs.external_https_lb_cert_id
+  ]
 }
 
 # HTTPS Forwarding Rule (port 443)
