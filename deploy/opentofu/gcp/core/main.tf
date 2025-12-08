@@ -16,10 +16,7 @@ terraform {
 
   # GCS Backend for Google Cloud Platform
   # Configuration values are provided via backend-config.hcl (auto-generated)
-  backend "gcs" {
-    bucket = "vibetics-cloudedge-nonprod-tfstate"
-    prefix = "vibetics-cloudedge-nonprod-core"
-  }
+  backend "gcs" {}
 
   required_providers {
     google = {

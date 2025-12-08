@@ -1,117 +1,314 @@
-# Google Cloud Platform (GCP) Infrastructure
+# GCP Resources Reference
 
-This document outlines the GCP infrastructure managed by OpenTofu. The infrastructure is divided into two main components: Project Singleton resources and Environment-Specific resources.
+This document provides a complete reference of GCP resources managed by each OpenTofu configuration.
 
-## Architecture Diagram
+## Configuration Overview
 
-The following diagram illustrates the high-level architecture of the environment-specific deployment, showing the flow of traffic from a user to the backend application.
-
-```mermaid
-graph TD
-    subgraph "User's Browser"
-        User[User]
-    end
-
-    subgraph "Google Cloud Platform"
-        User -->|HTTPS Request| LB["Global Load Balancer<br/>(Static IP)"]
-
-        subgraph "Edge Security"
-            LB -- "Inspects" --> WAF[Cloud Armor WAF Policy]
-        end
-
-        WAF -- "Routes" --> URLMap[URL Map]
-        URLMap --> BackendService["Backend Service<br/>(Cloud CDN Enabled)"]
-        BackendService --> NEG[Serverless NEG]
-
-        subgraph "VPC Network & Security Posture"
-            subgraph "Ingress VPC Components"
-                IngressVPC[("ingress_vpc")]
-                FW_INGRESS["Firewall:<br/>allow_ingress_vpc_https_ingress"]
-                IngressVPC -.-> FW_INGRESS
-            end
-            subgraph "Web VPC Security"
-                NEG -- "Health Checks<br/>are checked by" --> FW_WEB["Web VPC Firewall<br/>(Allows Health Checks, Denies All Else)"]
-            end
-        end
-
-        FW_WEB -- "Protects" --> CloudRun("Cloud Run Service<br/>(in web_vpc)")
-
-        subgraph "Application Egress"
-             CloudRun -->|Egress via| VPCConnector[VPC Access Connector]
-             VPCConnector --> FW_EGRESS["Egress Firewall Rules"]
-        end
-
-    end
-
-    style User fill:#d4a373,stroke:#333,stroke-width:2px
-    style LB fill:#a8dadc,stroke:#333,stroke-width:2px
-    style WAF fill:#e63946,stroke:#333,stroke-width:2px
-    style FW_WEB fill:#a3be8c,stroke:#333,stroke-width:2px
-    style IngressVPC fill:#ddeeff,stroke:#333,stroke-width:2px
-    style FW_INGRESS fill:#c9d6b5,stroke:#333,stroke-width:2px
-    style CloudRun fill:#f1faee,stroke:#333,stroke-width:2px
-    style VPCConnector fill:#f1faee,stroke:#333,stroke-width:1px
-    style FW_EGRESS fill:#a3be8c,stroke:#333,stroke-width:2px
+```
+deploy/opentofu/gcp/
+├── project-singleton/    # Project-level resources
+├── demo-vpc/             # Backend application VPC
+└── core/                 # Ingress infrastructure
 ```
 
-## Table of Contents
-- [Project Singleton Resources](#project-singleton-resources)
-- [Environment-Specific Resources](#environment-specific-resources)
-  - [Networking](#networking)
-  - [Application (Demo Web App)](#application-demo-web-app)
-  - [Traffic Management and Security](#traffic-management-and-security)
+## Project Singleton
+
+**Location**: `deploy/opentofu/gcp/project-singleton/`
+
+**Purpose**: Project-wide resources deployed once per GCP project.
+
+**Remote State Prefix**: `${project_id}-singleton`
+
+### APIs Enabled
+
+| Resource | Service | Description |
+|----------|---------|-------------|
+| `google_project_service.billingbudgets` | `billingbudgets.googleapis.com` | Billing budget alerts |
+| `google_project_service.cloudbilling` | `cloudbilling.googleapis.com` | Billing account access |
+| `google_project_service.compute` | `compute.googleapis.com` | Compute Engine resources |
+| `google_project_service.logging` | `logging.googleapis.com` | Cloud Logging |
+
+### Billing Budget
+
+| Resource | Description |
+|----------|-------------|
+| `google_billing_budget.budget` | Project billing budget with alerts at 50%, 80%, 100% |
+
+**Configuration**:
+
+- Currency: HKD (configurable via `budget_amount`)
+- Default: 1000 HKD
+- Alerts sent to billing admins
+
+### Logging
+
+| Resource | Description |
+|----------|-------------|
+| `google_logging_project_bucket_config.logs_bucket` | Centralized logging bucket |
+
+**Configuration**:
+
+- Location: global
+- Retention: 30 days (NFR-001 compliance)
+- Conditional: Only created when `enable_logging = true`
+
+### Outputs
+
+| Output | Description |
+|--------|-------------|
+| `project_suffix` | Environment suffix (nonprod/prod) |
+| `project_id` | GCP project ID |
+| `billing_budget_id` | Budget resource ID |
+| `logs_bucket_id` | Logging bucket ID (null if disabled) |
+| `enable_logging` | Whether logging is enabled |
 
 ---
 
-## Project Singleton Resources
+## Demo VPC
 
-These resources are foundational, project-wide components that are created once and are not tied to a specific environment. They are defined in `deploy/opentofu/gcp/project-singleton/`.
+**Location**: `deploy/opentofu/gcp/demo-vpc/`
 
-| File | Resource | Description |
-|---|---|---|
-| `apis.tf` | `google_project_service` | Enables essential GCP APIs required for the project, such as Compute Engine (`compute.googleapis.com`), Cloud Run (`run.googleapis.com`), and Billing (`billingbudgets.googleapis.com`). |
-| `billing.tf` | `google_billing_budget` | (Conditional) Creates a project-level billing budget to monitor costs in HKD. It is configured to send alerts at 50%, 80%, and 100% of the budget amount. |
-| `project_logs_bucket.tf` | `google_logging_project_bucket_config` | (Conditional) Provisions a centralized logging bucket for the project with a 30-day retention period, intended to meet compliance and observability requirements. |
+**Purpose**: Backend application VPC with Cloud Run service and PSC service attachment.
+
+**Remote State Prefix**: `${project_id}-demo-vpc`
+
+**Dependencies**: Reads from `project-singleton` remote state
+
+### VPC Network
+
+| Resource | Description |
+|----------|-------------|
+| `google_compute_network.web_vpc` | Application VPC (auto_create_subnetworks: false) |
+
+### Subnets
+
+| Resource | CIDR | Purpose |
+|----------|------|---------|
+| `google_compute_subnetwork.web_subnet` | 10.0.3.0/24 | Cloud Run and workloads |
+| `google_compute_subnetwork.proxy_only_subnet` | 10.0.99.0/24 | Internal ALB proxy-only (REGIONAL_MANAGED_PROXY) |
+| `google_compute_subnetwork.psc_nat_subnet` | 10.0.100.0/24 | PSC NAT (PRIVATE_SERVICE_CONNECT) |
+
+### Cloud Run
+
+| Resource | Description |
+|----------|-------------|
+| `google_cloud_run_v2_service.demo_web_app` | Demo web application container |
+| `google_cloud_run_v2_service_iam_member.invoker` | IAM binding for allUsers invocation |
+
+**Cloud Run Configuration**:
+
+- Ingress: `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER`
+- Scaling: min 0 (scale to zero)
+- Deletion protection: disabled
+- Image: Configurable via `demo_web_app_image`
+- Port: Configurable via `demo_web_app_port` (default: 3000)
+
+### Internal Load Balancer
+
+| Resource | Description |
+|----------|-------------|
+| `google_compute_region_network_endpoint_group.demo_web_app` | Serverless NEG for Cloud Run |
+| `google_compute_region_backend_service.demo_web_app_internal_backend` | Internal backend service (INTERNAL_MANAGED) |
+| `google_compute_region_url_map.internal_alb_url_map` | URL routing for internal ALB |
+| `google_compute_region_target_https_proxy.internal_alb_https_proxy` | HTTPS proxy with SSL certificate |
+| `google_compute_forwarding_rule.internal_alb_forwarding_rule` | Internal forwarding rule (port 443) |
+
+### SSL Certificate
+
+| Resource | Description |
+|----------|-------------|
+| `tls_private_key.self_signed_cert_key` | RSA 2048-bit private key |
+| `tls_self_signed_cert.self_signed_cert` | Self-signed certificate (1 year validity) |
+| `google_compute_region_ssl_certificate.internal_alb_cert_binding` | Regional SSL certificate binding |
+
+### Private Service Connect
+
+| Resource | Description |
+|----------|-------------|
+| `google_compute_service_attachment.demo_web_app_psc_attachment` | PSC service attachment (producer) |
+
+**PSC Configuration**:
+
+- Connection preference: `ACCEPT_AUTOMATIC`
+- Proxy protocol: disabled
+- Target: Internal ALB forwarding rule
+
+### Outputs
+
+| Output | Description |
+|--------|-------------|
+| `demo_web_app_psc_service_attachment_self_link` | PSC service attachment ID for consumers |
 
 ---
 
-## Environment-Specific Resources
+## Core
 
-These resources define a complete, isolated environment for the application. The deployment of these components is highly modular and controlled by feature flags (e.g., `enable_*` variables). They are defined in `deploy/opentofu/gcp/environment-specific/`.
+**Location**: `deploy/opentofu/gcp/core/`
 
-The entire environment-specific deployment depends on the `project-singleton` layer, referencing it via a `terraform_remote_state` data source.
+**Purpose**: Public-facing ingress infrastructure with WAF and PSC consumer.
 
-### Networking
+**Remote State Prefix**: `${project_id}-core`
 
-A secure, two-tiered VPC network is established to isolate the application and control traffic flow.
+**Dependencies**:
 
-| File | Resource | Description |
-|---|---|---|
-| `vpcs.tf` | `google_compute_network` | Creates two VPCs: an `ingress_vpc` for external-facing components and a more restricted `web_vpc` for the core application. |
-| `subnets.tf` | `google_compute_subnetwork` | Defines subnets within the VPCs, including a dedicated `vpc_connector_subnet` used to bridge the serverless environment with the `web_vpc`. |
-| `firewall.tf` | `google_compute_firewall` | Implements a defense-in-depth security model. Rules are set up to allow necessary ingress traffic (e.g., HTTPS, Google health checks) to the appropriate VPCs while denying all other ingress to the secure `web_vpc`. |
-| `vpc_connector.tf`| `data.remote_state.singleton.google_vpc_access_connector` | References a Serverless VPC Access connector, which links the Cloud Run service to the `web_vpc`. This allows the serverless application to communicate with resources within the private network and routes all its egress traffic through the VPC. |
+- Reads from `project-singleton` for `enable_logging`
+- Reads from `demo-vpc` for `demo_web_app_psc_service_attachment_self_link`
 
-### Application (Demo Web App)
+### Providers
 
-A sample web application is deployed using Google's serverless platform, Cloud Run.
+| Provider | Purpose |
+|----------|---------|
+| `google` | Standard GCP resources |
+| `google-beta` | Beta features |
+| `cloudflare` | DNS management |
 
-| File | Resource | Description |
-|---|---|---|
-| `cloud_run.tf` | `google_cloud_run_v2_service` | Deploys the containerized demo web application. It is configured to scale to zero for cost-effectiveness and only allow internal traffic from the Load Balancer and the VPC. |
-| `cloud_run.tf` | `google_cloud_run_v2_service_iam_member` | Sets an IAM policy to allow public invocation (`allUsers`) of the Cloud Run service, with access control being handled by the load balancer and WAF. |
+### APIs Enabled
 
-### Traffic Management and Security
+| Resource | Service | Description |
+|----------|---------|-------------|
+| `google_project_service.run` | `run.googleapis.com` | Cloud Run API |
 
-A global load balancer, CDN, and Web Application Firewall (WAF) are used to securely deliver the application to users.
+### Static IP
 
-| File | Resource | Description |
-|---|---|---|
-| `dr_loadbalancers.tf` | `google_compute_global_address` | Reserves a static, global IP address for the load balancer. |
-| `dr_loadbalancers.tf` | `google_compute_global_forwarding_rule` | The entry point for all user traffic. It directs incoming HTTPS requests from the global IP address to the target proxy. HTTP traffic is not permitted. |
-| `dr_loadbalancers.tf` | `google_compute_target_https_proxy` | Terminates TLS using a self-signed certificate and uses a URL map to route requests. |
-| `dr_loadbalancers.tf` | `google_compute_url_map` | Routes incoming requests to the appropriate backend service based on host and path rules. By default, it sends all traffic to the demo web app's backend service. |
-| `backend_service.tf`| `google_compute_backend_service` | Defines how the load balancer distributes traffic to the backends. It is configured to log 100% of requests and has Cloud CDN enabled. It is also attached to the WAF policy. |
-| `serverless_neg.tf` | `google_compute_region_network_endpoint_group` | A Serverless Network Endpoint Group (NEG) that acts as the bridge between the load balancer's backend service and the serverless Cloud Run application. |
-| `waf_policy.tf` | `google_compute_security_policy` | A Cloud Armor (WAF) policy attached to the backend service. It uses preconfigured rules to protect the application from common web attacks like SQL Injection (SQLi) and Cross-Site Scripting (XSS). |
-| `cdn_backend.tf` | `google_compute_backend_bucket` | (Conditional) Creates a backend bucket for Cloud CDN to cache and serve static assets. |
+| Resource | Description |
+|----------|-------------|
+| `google_compute_address.external_lb_ip` | Regional external IP (STANDARD tier) |
+
+### VPC Network
+
+| Resource | Description |
+|----------|-------------|
+| `google_compute_network.ingress_vpc` | Ingress VPC (auto_create_subnetworks: false) |
+
+### Subnets
+
+| Resource | CIDR | Purpose |
+|----------|------|---------|
+| `google_compute_subnetwork.ingress_subnet` | 10.0.1.0/24 | Ingress traffic (private Google access enabled) |
+| `google_compute_subnetwork.proxy_only_subnet` | 10.0.98.0/24 | External ALB proxy-only (REGIONAL_MANAGED_PROXY) |
+
+### Firewall
+
+| Resource | Description |
+|----------|-------------|
+| `google_compute_firewall.allow_ingress_vpc_https_ingress` | Allow HTTPS (port 443) from configured sources |
+
+**Firewall Configuration**:
+
+- Direction: INGRESS
+- Priority: 1000
+- Source ranges: Configurable via `allowed_https_source_ranges` (default: 0.0.0.0/0)
+
+### Cloud Armor WAF
+
+| Resource | Description |
+|----------|-------------|
+| `google_compute_security_policy.edge_waf_policy` | Cloud Armor security policy |
+
+**WAF Rules**:
+
+| Priority | Expression | Action |
+|----------|------------|--------|
+| 1000 | `sqli-v33-stable` | deny(403) |
+| 1001 | `xss-v33-stable` | deny(403) |
+| 1002 | `lfi-v33-stable` | deny(403) |
+| 1003 | `rfi-v33-stable` | deny(403) |
+| 1004 | `rce-v33-stable` | deny(403) |
+| 1006 | `methodenforcement-v33-stable` | deny(403) |
+| 1007 | `scannerdetection-v33-stable` | deny(403) |
+| 1008 | `protocolattack-v33-stable` | deny(403) |
+| 1009 | `sessionfixation-v33-stable` | deny(403) |
+| 1010 | `nodejs-v33-stable` | deny(403) |
+| 2147483647 | `*` (default) | allow |
+
+### SSL Certificate
+
+| Resource | Description |
+|----------|-------------|
+| `tls_private_key.self_signed_key` | RSA 2048-bit private key |
+| `tls_self_signed_cert.self_signed_cert` | Self-signed certificate (1 year validity) |
+| `google_compute_region_ssl_certificate.external_https_lb_cert_binding` | Regional SSL certificate binding |
+
+**Certificate Configuration**:
+
+- Common name: `${demo_web_app_subdomain_name}.${root_domain}`
+- DNS names: Same as common name
+
+### PSC Consumer
+
+| Resource | Description |
+|----------|-------------|
+| `google_compute_region_network_endpoint_group.demo_web_app_psc_neg` | PSC NEG (consumer) |
+
+**PSC Configuration**:
+
+- Type: `PRIVATE_SERVICE_CONNECT`
+- Target: `demo_web_app_psc_service_attachment_self_link` from demo-vpc
+
+### External Load Balancer
+
+| Resource | Description |
+|----------|-------------|
+| `google_compute_region_backend_service.demo_web_app_external_backend` | External backend service with WAF |
+| `google_compute_region_url_map.external_https_lb` | URL routing for external LB |
+| `google_compute_region_target_https_proxy.external_https_lb` | HTTPS proxy with SSL certificate |
+| `google_compute_forwarding_rule.external_https_lb` | External forwarding rule (port 443) |
+
+**Load Balancer Configuration**:
+
+- Scheme: `EXTERNAL_MANAGED` (regional)
+- Protocol: HTTPS
+- Network tier: STANDARD
+- Security policy: `edge_waf_policy`
+
+### Cloudflare DNS
+
+| Resource | Description |
+|----------|-------------|
+| `cloudflare_record.demo_web_app_subdomain_a` | A record for subdomain |
+
+**DNS Configuration**:
+
+- Type: A
+- TTL: 120 seconds
+- Proxied: false (direct to GCP)
+- Content: External LB IP address
+
+### Outputs
+
+| Output | Description |
+|--------|-------------|
+| `ingress_vpc_id` | Ingress VPC resource ID |
+| `ingress_subnet_id` | Ingress subnet resource ID |
+| `load_balancer_ip` | External load balancer IP address |
+| `waf_policy_id` | Cloud Armor policy ID |
+
+---
+
+## Resource Dependencies
+
+```
+project-singleton
+        |
+        | (terraform_remote_state)
+        v
+    demo-vpc
+        |
+        | (terraform_remote_state: psc_service_attachment_self_link)
+        v
+      core
+```
+
+## Conditional Resources
+
+Many resources are conditionally created based on feature flags:
+
+| Flag | Configurations Affected | Resources Controlled |
+|------|------------------------|---------------------|
+| `enable_logging` | project-singleton | `logs_bucket` |
+| `enable_demo_web_app` | demo-vpc, core | All Cloud Run, NEG, PSC resources |
+
+When `enable_demo_web_app = false`:
+
+- demo-vpc creates no resources (all have `count = 0`)
+- core PSC NEG and backend service are not created
