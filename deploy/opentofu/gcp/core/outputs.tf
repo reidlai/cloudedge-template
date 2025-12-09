@@ -36,3 +36,8 @@ output "cloudflare_origin_cert_id" {
   description = "The ID of the Cloudflare origin certificate used for Cloudflare-to-GCP encryption. Returns null if Cloudflare proxy is disabled."
   value       = local.enable_cloudflare_proxy ? google_compute_region_ssl_certificate.cloudflare_origin_cert[0].id : null
 }
+
+output "psc_enabled" {
+  description = "Indicates whether Private Service Connect (PSC) is enabled for this module."
+  value       = local.enable_psc
+}

@@ -31,6 +31,7 @@ locals {
   enable_waf                   = var.enable_waf
   enable_cloudflare_proxy      = var.enable_cloudflare_proxy
   cloudflare_origin_ca_key     = var.cloudflare_origin_ca_key
+  enable_psc                   = var.enable_psc
 
   # Cloudflare IP ranges for firewall when proxy is enabled
   # Source: https://www.cloudflare.com/ips/
@@ -435,7 +436,7 @@ resource "google_compute_firewall" "allow_ingress_vpc_https_ingress" {
 ###########
 
 resource "google_compute_region_network_endpoint_group" "demo_web_app_psc_neg" {
-  count                 = local.enable_demo_web_app ? 1 : 0
+  count                 = local.enable_psc ? 1 : 0
   project               = local.project_id
   name                  = "demo-web-app-psc-neg"
   region                = local.region

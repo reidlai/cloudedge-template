@@ -72,3 +72,15 @@ variable "demo_web_app_port" {
   type        = number
   default     = 3000
 }
+
+variable "enable_psc" {
+  description = "If true, enables the creation of Private Service Connect (PSC) resources by default. Set to false to disable PSC provisioning."
+  type        = bool
+  default     = true
+}
+
+variable "psc_nat_subnet_cidr_range" {
+  description = "The CIDR range for the PSC NAT subnet."
+  type        = string
+  default     = "10.0.100.0/24"
+}

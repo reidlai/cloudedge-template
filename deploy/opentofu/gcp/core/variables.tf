@@ -147,3 +147,9 @@ variable "enable_cloudflare_proxy" {
   type        = bool
   default     = true
 }
+
+variable "enable_psc" {
+  description = "If true, enables the creation of Private Service Connect (PSC) resources by default. Set to false to disable PSC provisioning."
+  type        = bool
+  default     = true
+}

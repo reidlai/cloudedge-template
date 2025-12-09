@@ -25,6 +25,8 @@ locals {
   demo_web_app_internal_backend_name = "${local.demo_web_app_service_name}-internal-backend"
   web_subnet_cidr_range              = var.web_subnet_cidr_range
   proxy_only_subnet_cidr_range       = var.proxy_only_subnet_cidr_range
+  enable_psc                         = var.enable_psc
+  psc_nat_subnet_cidr_range          = var.psc_nat_subnet_cidr_range
 }
 
 provider "google" {
@@ -97,10 +99,10 @@ resource "google_compute_subnetwork" "proxy_only_subnet" {
 #########################################
 
 resource "google_compute_subnetwork" "psc_nat_subnet" {
-  count         = local.enable_demo_web_app ? 1 : 0
+  count         = local.enable_psc ? 1 : 0
   project       = local.project_id
   name          = "psc-nat-subnet"
-  ip_cidr_range = "10.0.100.0/24"
+  ip_cidr_range = local.psc_nat_subnet_cidr_range
   region        = local.region
   network       = google_compute_network.web_vpc[0].id
   purpose       = "PRIVATE_SERVICE_CONNECT"
@@ -270,7 +272,7 @@ resource "google_compute_forwarding_rule" "internal_alb_forwarding_rule" {
 ##########################
 
 resource "google_compute_service_attachment" "demo_web_app_psc_attachment" {
-  count                 = local.enable_demo_web_app ? 1 : 0
+  count                 = local.enable_psc ? 1 : 0
   project               = local.project_id
   name                  = "demo-web-app-psc-attachment"
   region                = local.region
