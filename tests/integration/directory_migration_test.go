@@ -2,9 +2,9 @@ package integration
 
 import (
 	"fmt"
-	"os"
+
 	"os/exec"
-	"strings"
+
 	"testing"
 
 	"github.com/cucumber/godog"
@@ -167,42 +167,42 @@ func (w *testWorld) thePoolLocationShouldMatchRegion() error {
 	return nil
 }
 
-func publishingOptionsEnabled() error {
+func (w *testWorld) publishingOptionsEnabled() error {
 	return nil
 }
 
-func privateCAModuleEnabled() error {
+func (w *testWorld) privateCAModuleEnabled() error {
 	return nil
 }
 
-func inspectLBResource(resourceName string) error {
+func (w *testWorld) inspectLBResource(resourceName string) error {
 	return nil
 }
 
-func fieldShouldBeSet(field string) error {
+func (w *testWorld) fieldShouldBeSet(field string) error {
 	return nil
 }
 
-func fieldShouldBeNull(field string) error {
+func (w *testWorld) fieldShouldBeNull(field string) error {
 	return nil
 }
 
-func mapReferencesCert() error {
+func (w *testWorld) mapReferencesCert() error {
 	return nil
 }
 
-func authorizedUsersVariableSet(varName string) error {
+func (w *testWorld) authorizedUsersVariableSet(varName string) error {
 	return nil
 }
 
-func roleShouldBeGranted(role string) error {
+func (w *testWorld) roleShouldBeGranted(role string) error {
 	return nil
 }
 
-func membersListCheck() error {
+func (w *testWorld) membersListCheck() error {
 	return nil
 }
 
-func bindingAttachedToPool() error {
+func (w *testWorld) bindingAttachedToPool() error {
 	return nil
 }
