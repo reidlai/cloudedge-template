@@ -153,3 +153,15 @@ variable "enable_psc" {
   type        = bool
   default     = true
 }
+
+variable "enable_shared_vpc" {
+  description = "If true, deploys the ingress VPC as a Shared VPC host project. Set to false to create a standalone VPC."
+  type        = bool
+  default     = false
+}
+
+variable "enable_internal_alb" {
+  description = "If true, enables the creation of an Internal Application Load Balancer for the demo web app."
+  type        = bool
+  default     = true
+}

@@ -79,8 +79,20 @@ variable "enable_psc" {
   default     = true
 }
 
+variable "enable_shared_vpc" {
+  description = "If true, deploys the ingress VPC as a Shared VPC host project. Set to false to create a standalone VPC."
+  type        = bool
+  default     = false
+}
+
 variable "psc_nat_subnet_cidr_range" {
   description = "The CIDR range for the PSC NAT subnet."
   type        = string
   default     = "10.0.100.0/24"
+}
+
+variable "enable_internal_alb" {
+  description = "If true, enables the creation of an Internal Application Load Balancer for the demo web app."
+  type        = bool
+  default     = true
 }

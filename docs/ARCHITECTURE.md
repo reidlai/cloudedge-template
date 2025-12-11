@@ -11,11 +11,15 @@ This document provides detailed architecture documentation for Vibetics CloudEdg
 5. **Separation of Concerns**: Each configuration manages a distinct layer
 6. **Cost Optimization**: Flexible architecture supporting free and paid security options
 
-## Current Architecture: Cloudflare Edge + PSC
+## Current Architecture: Flexible Connectivity Patterns
 
-The infrastructure uses **Cloudflare as the edge security layer** by default, combined with Private Service Connect (PSC) for backend connectivity.
+The infrastructure supports **three connectivity patterns** controlled by `enable_psc` and `enable_internal_alb` variables, all using **Cloudflare as the edge security layer** by default.
 
-### Traffic Flow (Default Configuration)
+### Pattern 1: PSC with Internal ALB (Default - Maximum Isolation)
+
+**Configuration:** `enable_psc=true, enable_internal_alb=true`
+
+**Traffic Flow:**
 
 ```
 Internet
@@ -55,6 +59,116 @@ Serverless NEG
 Cloud Run Service (demo-web-app)
     | Ingress: INTERNAL_LOAD_BALANCER only
 ```
+
+**Benefits:**
+- ✅ Maximum network isolation (complete VPC separation)
+- ✅ Supports multi-tenant architectures
+- ✅ Cross-project connectivity without VPC peering
+- ✅ IP address overlap allowed (PSC NAT handles translation)
+- ✅ Producer controls consumer access
+
+**Trade-offs:**
+- Additional complexity (two VPCs, PSC setup)
+- Additional resources (Internal ALB, PSC NAT subnet)
+
+### Pattern 2: Direct Cloud Run (Simplest)
+
+**Configuration:** `enable_psc=false, enable_internal_alb=false`
+
+**Traffic Flow:**
+
+```
+Internet
+    |
+    v
+Cloudflare Global Network (proxied = true)
+    |
+    +---> Cloudflare WAF (OWASP Top 10, free)
+    +---> Cloudflare DDoS Protection (free)
+    +---> Cloudflare SSL/TLS Termination
+    |
+    | Cloudflare Origin Certificate (15-year, RSA 2048)
+    |
+    v
+Regional External HTTPS Load Balancer (GCP)
+    |
+    +---> Regional Backend Service (EXTERNAL_MANAGED)
+    |
+    v
+Ingress VPC Firewall (Cloudflare IPs only)
+    |
+    v
+Serverless NEG (SERVERLESS type, not PSC)
+    |
+    v
+Cloud Run Service (demo-web-app)
+    | Ingress: INTERNAL_LOAD_BALANCER only
+```
+
+**Benefits:**
+- ✅ Simplest architecture (minimal resources)
+- ✅ Lower cost (no Internal ALB, no PSC setup)
+- ✅ Single-project deployment
+- ✅ Faster deployment
+- ✅ Easier troubleshooting
+
+**Trade-offs:**
+- No VPC isolation (external LB connects directly to Cloud Run)
+- Cannot use different GCP projects for ingress and application
+- No PSC-based multi-tenancy support
+
+**Use case:** Single-project deployments, MVPs, cost-sensitive applications
+
+### Pattern 3: Shared VPC with Internal ALB
+
+**Configuration:** `enable_psc=false, enable_internal_alb=true, enable_shared_vpc=true`
+
+**Traffic Flow:**
+
+```
+Internet
+    |
+    v
+Cloudflare Global Network (proxied = true)
+    |
+    +---> Cloudflare WAF (OWASP Top 10, free)
+    +---> Cloudflare DDoS Protection (free)
+    +---> Cloudflare SSL/TLS Termination
+    |
+    | Cloudflare Origin Certificate (15-year, RSA 2048)
+    |
+    v
+Regional External HTTPS Load Balancer (GCP)
+    |
+    +---> Regional Backend Service (EXTERNAL_MANAGED)
+    |     (connects to Internal ALB via Shared VPC)
+    |
+    v
+Ingress VPC Firewall (Cloudflare IPs only)
+    |
+    v
+Internal HTTPS Load Balancer (INTERNAL_MANAGED)
+    |
+    v
+Serverless NEG
+    |
+    v
+Cloud Run Service (demo-web-app)
+    | Ingress: INTERNAL_LOAD_BALANCER only
+```
+
+**Benefits:**
+- ✅ Shared VPC compatibility
+- ✅ Organizational policy compliance
+- ✅ Internal load balancing benefits
+- ✅ No PSC complexity
+
+**Trade-offs:**
+- Shared VPC setup required
+- No cross-project isolation like PSC
+- IP address planning required (no overlap allowed)
+
+**Use case:** Organizations with existing Shared VPC policies, enterprise deployments
 
 ## Architecture Options
 
@@ -232,20 +346,41 @@ google_compute_region_ssl_certificate.external_https_lb_cert
 - ⚠️ Browser warnings (not trusted)
 - ⚠️ For testing/development only
 
-## Connectivity: Private Service Connect (PSC)
+## Connectivity Architecture Decision Guide
 
-### Why PSC Instead of VPC Peering?
+### When to Choose Each Pattern
 
-| Aspect | VPC Peering | Private Service Connect |
-|--------|-------------|------------------------|
-| **IP Overlap** | Not allowed | Allowed (NAT handles translation) |
-| **Scalability** | Limited by peering quota | Scales to 1000+ consumers |
-| **Security Boundary** | Shares routing tables | Complete network isolation |
-| **Multi-Tenancy** | Complex | Natural fit (each tenant = service attachment) |
-| **Cross-Org** | Requires explicit peering | Works across organizations |
-| **Producer Control** | Bidirectional trust | Producer controls access |
+| Criteria | Pattern 1: PSC + Internal ALB | Pattern 2: Direct Cloud Run | Pattern 3: Shared VPC + Internal ALB |
+|----------|-------------------------------|----------------------------|-------------------------------------|
+| **Use Case** | Multi-tenant, cross-project isolation | Single-project, MVP, cost-optimized | Enterprise Shared VPC policies |
+| **Complexity** | High (two VPCs, PSC, Internal ALB) | Low (minimal resources) | Medium (Shared VPC setup) |
+| **Cost** | Highest (~$30/month with Internal ALB) | Lowest (~$23/month) | Medium (~$30/month) |
+| **Network Isolation** | Maximum (complete VPC separation) | Minimal (single VPC) | Medium (Shared VPC) |
+| **IP Overlap** | Allowed (PSC NAT) | N/A (single network) | Not allowed |
+| **Cross-Project** | Yes (via PSC) | No | Yes (via Shared VPC) |
+| **Setup Time** | Slowest | Fastest | Medium |
+| **Scalability** | 1000+ consumers | Single consumer | Limited by Shared VPC quota |
 
-**Chosen Approach**: PSC provides better isolation for multi-tenant scenarios and avoids IP addressing conflicts.
+### Connectivity: Private Service Connect (PSC)
+
+**When to Use:** Pattern 1 (PSC + Internal ALB)
+
+#### Why PSC Instead of VPC Peering or Direct Connection?
+
+| Aspect | Direct Connection | VPC Peering | Private Service Connect |
+|--------|------------------|-------------|------------------------|
+| **IP Overlap** | N/A | Not allowed | Allowed (NAT handles translation) |
+| **Scalability** | 1:1 | Limited by peering quota | Scales to 1000+ consumers |
+| **Security Boundary** | Same project | Shares routing tables | Complete network isolation |
+| **Multi-Tenancy** | Not supported | Complex | Natural fit (each tenant = service attachment) |
+| **Cross-Org** | Not applicable | Requires explicit peering | Works across organizations |
+| **Producer Control** | N/A | Bidirectional trust | Producer controls access |
+| **Complexity** | Simplest | Medium | Highest |
+| **Cost** | Lowest | Medium | Highest |
+
+**Chosen Approach for Pattern 1**: PSC provides better isolation for multi-tenant scenarios and avoids IP addressing conflicts.
+
+**Alternative Approach for Pattern 2**: Direct serverless NEG connection provides simplest architecture for single-project deployments.
 
 ### PSC Architecture Pattern
 
