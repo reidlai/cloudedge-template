@@ -41,3 +41,8 @@ output "psc_enabled" {
   description = "Indicates whether Private Service Connect (PSC) is enabled for this module."
   value       = local.enable_psc
 }
+
+output "internal_alb_enabled" {
+  description = "Indicates whether the Internal Application Load Balancer is enabled for the demo web app."
+  value       = local.enable_internal_alb
+}

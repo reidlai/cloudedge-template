@@ -9,9 +9,11 @@ Vibetics CloudEdge provides a **modular secure baseline infrastructure** for dep
 **What This Project Provides** (Infrastructure-Only):
 
 - **Flexible Edge Security**: Choose between Cloudflare WAF (free) or GCP Cloud Armor (paid)
+- **Flexible Connectivity**: PSC (isolation), Direct Cloud Run (simplicity), or Shared VPC (enterprise)
 - Regional HTTPS Load Balancer with SSL termination
 - Cloudflare Origin CA certificates or Google-managed certificates
-- Private Service Connect (PSC) for cross-VPC connectivity
+- Optional Private Service Connect (PSC) for cross-VPC connectivity
+- Optional Internal Application Load Balancer
 - Ingress VPC with dynamic firewall rules (Cloudflare IPs or custom ranges)
 - Cloudflare DNS integration with proxy support
 - Billing budget monitoring
@@ -24,7 +26,40 @@ Vibetics CloudEdge provides a **modular secure baseline infrastructure** for dep
 
 ## Architecture
 
-### Current Implementation: Cloudflare Edge + Private Service Connect
+### Architecture Flexibility
+
+The infrastructure supports **three connectivity patterns** controlled by `enable_psc` and `enable_internal_alb` variables:
+
+#### Pattern 1: PSC with Internal ALB (Default - Maximum Isolation)
+**Configuration:** `enable_psc=true, enable_internal_alb=true`
+
+```
+Internet → Cloudflare → External HTTPS LB → PSC NEG →
+  PSC Service Attachment → Internal ALB → Serverless NEG → Cloud Run
+```
+
+**Use case:** Maximum network isolation for multi-tenant or security-critical deployments
+
+#### Pattern 2: Direct Cloud Run (Simplest)
+**Configuration:** `enable_psc=false, enable_internal_alb=false`
+
+```
+Internet → Cloudflare → External HTTPS LB → Serverless NEG → Cloud Run
+```
+
+**Use case:** Single-project deployments, simplified architecture, cost optimization
+
+#### Pattern 3: Shared VPC with Internal ALB
+**Configuration:** `enable_psc=false, enable_internal_alb=true, enable_shared_vpc=true`
+
+```
+Internet → Cloudflare → External HTTPS LB →
+  Shared VPC Backend Service → Internal ALB → Serverless NEG → Cloud Run
+```
+
+**Use case:** Shared VPC scenarios, organizational policy requirements
+
+### Detailed Architecture: PSC with Internal ALB (Default)
 
 ```
                             INTERNET
@@ -70,33 +105,34 @@ Vibetics CloudEdge provides a **modular secure baseline infrastructure** for dep
 |  +--------------------------------------------------------+  |
 |                                     |                        |
 |  +----------------------------------v---------------------+  |
-|  |           PSC Consumer (Private Service Connect)       |  |
-|  |  +--------------------------------------------------+  |  |
-|  |  | PSC NEG -> Service Attachment in demo-vpc        |  |  |
-|  |  +--------------------------------------------------+  |  |
+|  |        PSC NEG / Direct Backend (Conditional)          |  |
+|  |  If enable_psc=true:                                   |  |
+|  |    PSC NEG -> Service Attachment in demo-vpc           |  |
+|  |  If enable_psc=false:                                  |  |
+|  |    Direct Backend Service -> Serverless NEG/Internal ALB|  |
 |  +--------------------------------------------------------+  |
 +--------------------------------------------------------------+
                                |
-                               | Private Service Connect
+           PSC (if enabled) or Direct Connection
                                |
 +------------------------------v-------------------------------+
 |                   DEMO-VPC CONFIGURATION                     |
 |                   deploy/opentofu/gcp/demo-vpc               |
 |                                                              |
 |  +--------------------------------------------------------+  |
-|  |                      Web VPC                           |  |
+|  |               Web VPC (if enable_internal_alb=true)    |  |
 |  |  +------------------+    +------------------------+    |  |
 |  |  | Web Subnet       |    | Proxy-Only Subnet      |    |  |
 |  |  | (10.0.3.0/24)    |    | (10.0.99.0/24)         |    |  |
 |  |  +------------------+    +------------------------+    |  |
 |  |                          +------------------------+    |  |
 |  |                          | PSC NAT Subnet         |    |  |
-|  |                          | (10.0.100.0/24)        |    |  |
+|  |                          | (if enable_psc=true)   |    |  |
 |  |                          +------------------------+    |  |
 |  +--------------------------------------------------------+  |
 |                               |                              |
 |  +---------------------------v----------------------------+  |
-|  |              Internal Application Load Balancer         |  |
+|  |    Internal ALB (if enable_internal_alb=true)           |  |
 |  |  +------------------+    +------------------------+    |  |
 |  |  | Internal ALB     |    | Serverless NEG         |    |  |
 |  |  | URL Map          |--->| (Cloud Run service)    |    |  |
@@ -104,7 +140,7 @@ Vibetics CloudEdge provides a **modular secure baseline infrastructure** for dep
 |  +--------------------------------------------------------+  |
 |                               |                              |
 |  +---------------------------v----------------------------+  |
-|  |           PSC Service Attachment (Producer)             |  |
+|  |      PSC Service Attachment (if enable_psc=true)        |  |
 |  +--------------------------------------------------------+  |
 |                               |                              |
 |  +---------------------------v----------------------------+  |
@@ -316,6 +352,9 @@ The architecture supports flexible configuration via feature flags:
 | `enable_cloudflare_proxy` | `true` | Enable Cloudflare proxy | Free WAF, DDoS, hides origin IP |
 | `enable_waf` | `false` | Enable GCP Cloud Armor | $16-91/month additional cost |
 | `enable_demo_web_app` | varies | Deploy demo app | Creates all backend resources |
+| `enable_psc` | `true` | Enable Private Service Connect | Maximum network isolation, supports multi-tenant |
+| `enable_internal_alb` | `true` | Enable Internal ALB | Adds internal load balancer layer |
+| `enable_shared_vpc` | `false` | Enable Shared VPC | For organizational shared VPC policies |
 | `enable_logging` | `true` | Centralized logging | 30-day retention |
 | `enable_self_signed_cert` | `false` | Use self-signed certs | For testing only |
 

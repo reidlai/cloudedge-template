@@ -31,8 +31,10 @@ locals {
   enable_waf                   = var.enable_waf
   enable_cloudflare_proxy      = var.enable_cloudflare_proxy
   cloudflare_origin_ca_key     = var.cloudflare_origin_ca_key
-  enable_psc                   = var.enable_psc
-
+  # enable_psc                   = var.enable_psc
+  enable_psc          = var.enable_psc
+  enable_shared_vpc   = var.enable_shared_vpc
+  enable_internal_alb = var.enable_internal_alb
   # Cloudflare IP ranges for firewall when proxy is enabled
   # Source: https://www.cloudflare.com/ips/
   cloudflare_ipv4_ranges = [
@@ -436,7 +438,7 @@ resource "google_compute_firewall" "allow_ingress_vpc_https_ingress" {
 ###########
 
 resource "google_compute_region_network_endpoint_group" "demo_web_app_psc_neg" {
-  count                 = local.enable_psc ? 1 : 0
+  count                 = local.enable_demo_web_app && local.enable_psc ? 1 : 0
   project               = local.project_id
   name                  = "demo-web-app-psc-neg"
   region                = local.region
@@ -452,7 +454,7 @@ resource "google_compute_region_network_endpoint_group" "demo_web_app_psc_neg" {
 ######################################################
 
 resource "google_compute_region_backend_service" "demo_web_app_external_backend" {
-  count                 = local.enable_demo_web_app ? 1 : 0
+  count                 = local.enable_demo_web_app && local.enable_psc && local.enable_internal_alb ? 1 : 0
   project               = local.project_id
   region                = local.region
   name                  = "demo-web-app-external-backend"
@@ -478,7 +480,7 @@ resource "google_compute_region_backend_service" "demo_web_app_external_backend"
 resource "google_compute_region_url_map" "external_https_lb" {
   project         = local.project_id
   name            = "external-https-lb"
-  default_service = google_compute_region_backend_service.demo_web_app_external_backend[0].id
+  default_service = local.enable_internal_alb ? google_compute_region_backend_service.demo_web_app_external_backend[0].id : data.terraform_remote_state.demo_vpc[0].outputs.demo_web_app_backend_service_id
 }
 
 # HTTPS Proxy

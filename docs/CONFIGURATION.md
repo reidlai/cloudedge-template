@@ -78,8 +78,12 @@ TF_VAR_demo_web_app_image="us-docker.pkg.dev/cloudrun/container/hello"
 | `enable_demo_web_app` | bool | Yes | - | Deploy demo Cloud Run service and all backend resources |
 | `web_subnet_cidr_range` | string | No | `10.0.3.0/24` | Web VPC subnet CIDR (must not overlap) |
 | `proxy_only_subnet_cidr_range` | string | No | `10.0.99.0/24` | Internal ALB proxy subnet CIDR |
+| `psc_nat_subnet_cidr_range` | string | No | `10.0.100.0/24` | PSC NAT subnet CIDR (used when `enable_psc=true`) |
 | `demo_web_app_image` | string | Yes | - | Docker image for Cloud Run (e.g., gcr.io/cloudrun/hello) |
 | `demo_web_app_port` | number | No | 3000 | Container port for Cloud Run service |
+| **`enable_psc`** | **bool** | **No** | **true** | **Enable Private Service Connect resources (PSC service attachment)** |
+| **`enable_internal_alb`** | **bool** | **No** | **true** | **Enable Internal Application Load Balancer** |
+| **`enable_shared_vpc`** | **bool** | **No** | **false** | **Deploy as Shared VPC host project** |
 
 ### Core
 
@@ -106,6 +110,9 @@ TF_VAR_demo_web_app_image="us-docker.pkg.dev/cloudrun/container/hello"
 | `url_map_path_matchers` | map(object) | No | `{}` | Additional path-based routing rules (future extensibility) |
 | **`enable_waf`** | **bool** | **No** | **false** | **Enable GCP Cloud Armor WAF ($16-91/month)** |
 | **`enable_cloudflare_proxy`** | **bool** | **No** | **true** | **Enable Cloudflare proxy (orange cloud) for free WAF/DDoS** |
+| **`enable_psc`** | **bool** | **No** | **true** | **Enable PSC NEG consumer (connects to PSC service attachment in demo-vpc)** |
+| **`enable_internal_alb`** | **bool** | **No** | **true** | **Enable backend service that connects to Internal ALB** |
+| **`enable_shared_vpc`** | **bool** | **No** | **false** | **Deploy ingress VPC as Shared VPC host project** |
 
 ## Feature Flags
 
@@ -118,8 +125,77 @@ TF_VAR_demo_web_app_image="us-docker.pkg.dev/cloudrun/container/hello"
 | `enable_self_signed_cert` | project-singleton | `false` | Uses self-signed certificates (1-year) | Uses Google-managed certificates |
 | **`enable_waf`** | **core** | **`false`** | **Creates Cloud Armor security policy ($16-91/mo)** | **No Cloud Armor (saves cost)** |
 | **`enable_cloudflare_proxy`** | **core** | **`true`** | **Enables Cloudflare proxy, WAF, DDoS (free)** | **Direct DNS to GCP** |
+| **`enable_psc`** | **demo-vpc, core** | **`true`** | **Creates PSC resources (service attachment, PSC NEG)** | **Direct serverless NEG connection** |
+| **`enable_internal_alb`** | **demo-vpc, core** | **`true`** | **Creates Internal ALB and web VPC** | **External LB connects directly to Cloud Run** |
+| **`enable_shared_vpc`** | **demo-vpc, core** | **`false`** | **Configures as Shared VPC host project** | **Standalone VPC** |
 
-### Architecture Configuration Matrix
+### Connectivity Pattern Configuration
+
+Choose your connectivity pattern based on isolation and complexity requirements:
+
+#### Pattern 1: PSC with Internal ALB (Default - Maximum Isolation)
+
+```bash
+TF_VAR_enable_psc="true"
+TF_VAR_enable_internal_alb="true"
+TF_VAR_enable_shared_vpc="false"
+```
+
+**Architecture:**
+- External HTTPS LB → PSC NEG → PSC Service Attachment → Internal ALB → Serverless NEG → Cloud Run
+
+**Use Case:** Multi-tenant, cross-project isolation, maximum security
+
+**Benefits:**
+- ✅ Complete VPC separation
+- ✅ IP overlap allowed (PSC NAT)
+- ✅ Cross-project connectivity
+- ✅ Producer controls access
+
+**Cost:** ~$30/month
+
+#### Pattern 2: Direct Cloud Run (Simplest)
+
+```bash
+TF_VAR_enable_psc="false"
+TF_VAR_enable_internal_alb="false"
+TF_VAR_enable_shared_vpc="false"
+```
+
+**Architecture:**
+- External HTTPS LB → Serverless NEG (SERVERLESS) → Cloud Run
+
+**Use Case:** Single-project, MVP, cost optimization
+
+**Benefits:**
+- ✅ Minimal resources
+- ✅ Fastest deployment
+- ✅ Simplest troubleshooting
+- ✅ Lower cost
+
+**Cost:** ~$23/month
+
+#### Pattern 3: Shared VPC with Internal ALB
+
+```bash
+TF_VAR_enable_psc="false"
+TF_VAR_enable_internal_alb="true"
+TF_VAR_enable_shared_vpc="true"
+```
+
+**Architecture:**
+- External HTTPS LB → Internal ALB (via Shared VPC) → Serverless NEG → Cloud Run
+
+**Use Case:** Enterprise Shared VPC policies, organizational requirements
+
+**Benefits:**
+- ✅ Shared VPC compatibility
+- ✅ No PSC complexity
+- ✅ Internal load balancing
+
+**Cost:** ~$30/month
+
+### Security Configuration Matrix
 
 Choose your security configuration by combining these flags:
 

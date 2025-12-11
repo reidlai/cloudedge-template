@@ -26,7 +26,9 @@ locals {
   web_subnet_cidr_range              = var.web_subnet_cidr_range
   proxy_only_subnet_cidr_range       = var.proxy_only_subnet_cidr_range
   enable_psc                         = var.enable_psc
+  enable_shared_vpc                  = var.enable_shared_vpc
   psc_nat_subnet_cidr_range          = var.psc_nat_subnet_cidr_range
+  enable_internal_alb                = var.enable_internal_alb
 }
 
 provider "google" {
@@ -57,7 +59,7 @@ data "google_project" "current" {
 ###########
 
 resource "google_compute_network" "web_vpc" {
-  count                   = local.enable_demo_web_app ? 1 : 0
+  count                   = local.enable_demo_web_app && local.enable_internal_alb ? 1 : 0
   project                 = local.project_id
   name                    = "web-vpc"
   auto_create_subnetworks = false
@@ -68,7 +70,7 @@ resource "google_compute_network" "web_vpc" {
 ##############
 
 resource "google_compute_subnetwork" "web_subnet" {
-  count                    = local.enable_demo_web_app ? 1 : 0
+  count                    = local.enable_demo_web_app && local.enable_internal_alb ? 1 : 0
   project                  = local.project_id
   name                     = "web-subnet"
   ip_cidr_range            = local.web_subnet_cidr_range
@@ -80,10 +82,10 @@ resource "google_compute_subnetwork" "web_subnet" {
 
 #################################################
 # Proxy-only subnet (required for Internal ALB) #
-#############################################demo-web-app-####
+#################################################
 
 resource "google_compute_subnetwork" "proxy_only_subnet" {
-  count         = local.enable_demo_web_app ? 1 : 0
+  count         = local.enable_demo_web_app && local.enable_internal_alb ? 1 : 0
   project       = local.project_id
   name          = "demo-web-app-proxy-only-subnet"
   ip_cidr_range = local.proxy_only_subnet_cidr_range
@@ -143,7 +145,7 @@ resource "google_compute_region_network_endpoint_group" "demo_web_app" {
   project               = local.project_id
   name                  = local.demo_web_app_neg_name
   region                = local.region
-  network_endpoint_type = "SERVERLESS"
+  network_endpoint_type = local.enable_psc ? "PRIVATE_SERVICE_CONNECT" : "SERVERLESS"
   cloud_run {
     service = google_cloud_run_v2_service.demo_web_app[0].name
   }
@@ -153,13 +155,13 @@ resource "google_compute_region_network_endpoint_group" "demo_web_app" {
 # Demo Web App Backend Service for Internal ALB #
 #################################################
 
-resource "google_compute_region_backend_service" "demo_web_app_internal_backend" {
+resource "google_compute_region_backend_service" "demo_web_app_backend" {
   count                 = local.enable_demo_web_app ? 1 : 0
   project               = local.project_id
   name                  = local.demo_web_app_internal_backend_name
   region                = local.region
   protocol              = "HTTPS"
-  load_balancing_scheme = "INTERNAL_MANAGED"
+  load_balancing_scheme = local.enable_internal_alb ? "INTERNAL_MANAGED" : "EXTERNAL_MANAGED"
   timeout_sec           = 30
 
   backend {
@@ -191,13 +193,13 @@ resource "google_cloud_run_v2_service_iam_member" "invoker" {
 #################################################################
 
 resource "tls_private_key" "self_signed_cert_key" {
-  count     = local.enable_demo_web_app ? 1 : 0
+  count     = local.enable_demo_web_app && local.enable_internal_alb ? 1 : 0
   algorithm = "RSA"
   rsa_bits  = 2048
 }
 
 resource "tls_self_signed_cert" "self_signed_cert" {
-  count             = local.enable_demo_web_app ? 1 : 0
+  count             = local.enable_demo_web_app && local.enable_internal_alb ? 1 : 0
   private_key_pem   = tls_private_key.self_signed_cert_key[0].private_key_pem
   is_ca_certificate = false
 
@@ -222,7 +224,7 @@ resource "tls_self_signed_cert" "self_signed_cert" {
 ############################################
 
 resource "google_compute_region_ssl_certificate" "internal_alb_cert_binding" {
-  count       = local.enable_demo_web_app ? 1 : 0
+  count       = local.enable_demo_web_app && local.enable_internal_alb ? 1 : 0
   project     = local.project_id
   region      = local.region
   name        = "internal-alb-cert-binding"
@@ -235,15 +237,15 @@ resource "google_compute_region_ssl_certificate" "internal_alb_cert_binding" {
 ######################################
 
 resource "google_compute_region_url_map" "internal_alb_url_map" {
-  count           = local.enable_demo_web_app ? 1 : 0
+  count           = local.enable_demo_web_app && local.enable_internal_alb ? 1 : 0
   project         = local.project_id
   name            = "internal-alb-url-map"
   region          = local.region
-  default_service = google_compute_region_backend_service.demo_web_app_internal_backend[0].id
+  default_service = google_compute_region_backend_service.demo_web_app_backend[0].id
 }
 
 resource "google_compute_region_target_https_proxy" "internal_alb_https_proxy" {
-  count            = local.enable_demo_web_app ? 1 : 0
+  count            = local.enable_demo_web_app && local.enable_internal_alb ? 1 : 0
   project          = local.project_id
   name             = "internal-alb-https-proxy"
   region           = local.region
@@ -252,7 +254,7 @@ resource "google_compute_region_target_https_proxy" "internal_alb_https_proxy" {
 }
 
 resource "google_compute_forwarding_rule" "internal_alb_forwarding_rule" {
-  count                 = local.enable_demo_web_app ? 1 : 0
+  count                 = local.enable_demo_web_app && local.enable_internal_alb ? 1 : 0
   project               = local.project_id
   name                  = "internal-alb-forwarding-rule"
   region                = local.region
