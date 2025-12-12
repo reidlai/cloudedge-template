@@ -28,38 +28,28 @@ Vibetics CloudEdge provides a **modular secure baseline infrastructure** for dep
 
 ### Architecture Flexibility
 
-The infrastructure supports **three connectivity patterns** controlled by `enable_psc` and `enable_internal_alb` variables:
+The infrastructure supports **two connectivity patterns** controlled by `enable_demo_web_app_psc_neg` variable:
 
-#### Pattern 1: PSC with Internal ALB (Default - Maximum Isolation)
-**Configuration:** `enable_psc=true, enable_internal_alb=true`
+#### Pattern 1: PSC with Internal ALB (Maximum Isolation)
+**Configuration:** `enable_demo_web_app_psc_neg=true` (in both core and demo-web-app)
 
 ```
 Internet → Cloudflare → External HTTPS LB → PSC NEG →
   PSC Service Attachment → Internal ALB → Serverless NEG → Cloud Run
 ```
 
-**Use case:** Maximum network isolation for multi-tenant or security-critical deployments
+**Use case:** Cross-project deployments, maximum network isolation
 
-#### Pattern 2: Direct Cloud Run (Simplest)
-**Configuration:** `enable_psc=false, enable_internal_alb=false`
+#### Pattern 2: Direct Backend Service (Simplest - Default)
+**Configuration:** `enable_demo_web_app_psc_neg=false`
 
 ```
-Internet → Cloudflare → External HTTPS LB → Serverless NEG → Cloud Run
+Internet → Cloudflare → External HTTPS LB → Backend Service → Serverless NEG → Cloud Run
 ```
 
 **Use case:** Single-project deployments, simplified architecture, cost optimization
 
-#### Pattern 3: Shared VPC with Internal ALB
-**Configuration:** `enable_psc=false, enable_internal_alb=true, enable_shared_vpc=true`
-
-```
-Internet → Cloudflare → External HTTPS LB →
-  Shared VPC Backend Service → Internal ALB → Serverless NEG → Cloud Run
-```
-
-**Use case:** Shared VPC scenarios, organizational policy requirements
-
-### Detailed Architecture: PSC with Internal ALB (Default)
+### Detailed Architecture: PSC with Internal ALB
 
 ```
                             INTERNET
@@ -106,33 +96,36 @@ Internet → Cloudflare → External HTTPS LB →
 |                                     |                        |
 |  +----------------------------------v---------------------+  |
 |  |        PSC NEG / Direct Backend (Conditional)          |  |
-|  |  If enable_psc=true:                                   |  |
-|  |    PSC NEG -> Service Attachment in demo-vpc           |  |
-|  |  If enable_psc=false:                                  |  |
-|  |    Direct Backend Service -> Serverless NEG/Internal ALB|  |
+|  |  If enable_demo_web_app_psc_neg=true:                  |  |
+|  |    PSC NEG -> Service Attachment in demo-web-app       |  |
+|  |  If enable_demo_web_app_psc_neg=false:                 |  |
+|  |    Direct Backend Service -> Cloud Run Backend         |  |
 |  +--------------------------------------------------------+  |
 +--------------------------------------------------------------+
                                |
            PSC (if enabled) or Direct Connection
                                |
 +------------------------------v-------------------------------+
-|                   DEMO-VPC CONFIGURATION                     |
-|                   deploy/opentofu/gcp/demo-vpc               |
+|                   DEMO WEB APP CONFIGURATION                 |
+|                   deploy/opentofu/gcp/demo-web-app           |
 |                                                              |
 |  +--------------------------------------------------------+  |
-|  |               Web VPC (if enable_internal_alb=true)    |  |
+|  |   Web VPC (if enable_demo_web_app_internal_alb=true    |  |
+|  |            or enable_demo_web_app_psc_neg=true)        |  |
 |  |  +------------------+    +------------------------+    |  |
 |  |  | Web Subnet       |    | Proxy-Only Subnet      |    |  |
 |  |  | (10.0.3.0/24)    |    | (10.0.99.0/24)         |    |  |
 |  |  +------------------+    +------------------------+    |  |
 |  |                          +------------------------+    |  |
 |  |                          | PSC NAT Subnet         |    |  |
-|  |                          | (if enable_psc=true)   |    |  |
+|  |                          | (if enable_demo_web_   |    |  |
+|  |                          |  app_psc_neg=true)     |    |  |
 |  |                          +------------------------+    |  |
 |  +--------------------------------------------------------+  |
 |                               |                              |
 |  +---------------------------v----------------------------+  |
-|  |    Internal ALB (if enable_internal_alb=true)           |  |
+|  |    Internal ALB (if enable_demo_web_app_internal_alb    |  |
+|  |                 or enable_demo_web_app_psc_neg=true)    |  |
 |  |  +------------------+    +------------------------+    |  |
 |  |  | Internal ALB     |    | Serverless NEG         |    |  |
 |  |  | URL Map          |--->| (Cloud Run service)    |    |  |
@@ -140,7 +133,8 @@ Internet → Cloudflare → External HTTPS LB →
 |  +--------------------------------------------------------+  |
 |                               |                              |
 |  +---------------------------v----------------------------+  |
-|  |      PSC Service Attachment (if enable_psc=true)        |  |
+|  |  PSC Service Attachment (if enable_demo_web_app_psc_neg |  |
+|  |                          =true)                         |  |
 |  +--------------------------------------------------------+  |
 |                               |                              |
 |  +---------------------------v----------------------------+  |
@@ -219,9 +213,9 @@ deploy/opentofu/gcp/
 │   ├── variables.tf
 │   └── outputs.tf
 │
-├── demo-vpc/            # 2. Application VPC (deploy second)
+├── demo-web-app/        # 2. Application VPC (deploy second)
 │   ├── main.tf          #    Backend config, providers
-│   ├── demo-vpc.tf      #    Web VPC, Cloud Run, Internal ALB, PSC
+│   ├── demo-web-app.tf  #    Web VPC, Cloud Run, Internal ALB, PSC
 │   ├── variables.tf
 │   └── outputs.tf
 │
@@ -235,8 +229,8 @@ deploy/opentofu/gcp/
 **Deployment Order Dependency**:
 
 1. `project-singleton` - Creates project-level resources, SSL certificates, outputs read by other configs
-2. `demo-vpc` - Creates backend VPC and PSC service attachment, outputs service attachment ID
-3. `core` - Creates ingress VPC and PSC consumer that connects to demo-vpc
+2. `demo-web-app` - Creates backend VPC and PSC service attachment, outputs service attachment ID
+3. `core` - Creates ingress VPC and PSC consumer that connects to demo-web-app
 
 ## Quick Start
 
@@ -352,9 +346,8 @@ The architecture supports flexible configuration via feature flags:
 | `enable_cloudflare_proxy` | `true` | Enable Cloudflare proxy | Free WAF, DDoS, hides origin IP |
 | `enable_waf` | `false` | Enable GCP Cloud Armor | $16-91/month additional cost |
 | `enable_demo_web_app` | varies | Deploy demo app | Creates all backend resources |
-| `enable_psc` | `true` | Enable Private Service Connect | Maximum network isolation, supports multi-tenant |
-| `enable_internal_alb` | `true` | Enable Internal ALB | Adds internal load balancer layer |
-| `enable_shared_vpc` | `false` | Enable Shared VPC | For organizational shared VPC policies |
+| `enable_demo_web_app_psc_neg` | `false` | Enable Private Service Connect NEG | Cross-project isolation via PSC |
+| `enable_demo_web_app_internal_alb` | `true` | Enable Internal ALB | Adds internal load balancer layer (required when PSC NEG enabled) |
 | `enable_logging` | `true` | Centralized logging | 30-day retention |
 | `enable_self_signed_cert` | `false` | Use self-signed certs | For testing only |
 

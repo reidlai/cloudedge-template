@@ -64,9 +64,9 @@ TF_VAR_demo_web_app_image="us-docker.pkg.dev/cloudrun/container/hello"
 
 **Note**: Tags must include `project-suffix` and `managed-by` keys (validated).
 
-### Demo VPC
+### Demo Web App
 
-**Location**: `deploy/opentofu/gcp/demo-vpc/variables.tf`
+**Location**: `deploy/opentofu/gcp/demo-web-app/variables.tf`
 
 | Variable | Type | Required | Default | Description |
 |----------|------|----------|---------|-------------|
@@ -81,9 +81,12 @@ TF_VAR_demo_web_app_image="us-docker.pkg.dev/cloudrun/container/hello"
 | `psc_nat_subnet_cidr_range` | string | No | `10.0.100.0/24` | PSC NAT subnet CIDR (used when `enable_psc=true`) |
 | `demo_web_app_image` | string | Yes | - | Docker image for Cloud Run (e.g., gcr.io/cloudrun/hello) |
 | `demo_web_app_port` | number | No | 3000 | Container port for Cloud Run service |
-| **`enable_psc`** | **bool** | **No** | **true** | **Enable Private Service Connect resources (PSC service attachment)** |
-| **`enable_internal_alb`** | **bool** | **No** | **true** | **Enable Internal Application Load Balancer** |
-| **`enable_shared_vpc`** | **bool** | **No** | **false** | **Deploy as Shared VPC host project** |
+| **`enable_demo_web_app_psc_neg`** | **bool** | **No** | **false** | **Enable Private Service Connect Network Endpoint Group (PSC NEG) for cross-project isolation** |
+| **`enable_demo_web_app_internal_alb`** | **bool** | **No** | **true** | **Enable Internal Application Load Balancer** |
+| `demo_web_app_web_vpc_name` | string | No | `demo-web-app-web-vpc` | Name of the Web VPC |
+| `demo_web_app_web_subnet_cidr_range` | string | No | `10.0.3.0/24` | Web subnet CIDR range |
+| `demo_web_app_proxy_only_subnet_cidr_range` | string | No | `10.0.99.0/24` | Proxy-only subnet CIDR for Internal ALB |
+| `demo_web_app_psc_nat_subnet_cidr_range` | string | No | `10.0.100.0/24` | PSC NAT subnet CIDR (used when PSC NEG enabled) |
 
 ### Core
 
@@ -110,9 +113,7 @@ TF_VAR_demo_web_app_image="us-docker.pkg.dev/cloudrun/container/hello"
 | `url_map_path_matchers` | map(object) | No | `{}` | Additional path-based routing rules (future extensibility) |
 | **`enable_waf`** | **bool** | **No** | **false** | **Enable GCP Cloud Armor WAF ($16-91/month)** |
 | **`enable_cloudflare_proxy`** | **bool** | **No** | **true** | **Enable Cloudflare proxy (orange cloud) for free WAF/DDoS** |
-| **`enable_psc`** | **bool** | **No** | **true** | **Enable PSC NEG consumer (connects to PSC service attachment in demo-vpc)** |
-| **`enable_internal_alb`** | **bool** | **No** | **true** | **Enable backend service that connects to Internal ALB** |
-| **`enable_shared_vpc`** | **bool** | **No** | **false** | **Deploy ingress VPC as Shared VPC host project** |
+| **`enable_demo_web_app_psc_neg`** | **bool** | **No** | **false** | **Enable PSC NEG consumer (connects to PSC service attachment in demo-web-app)** |
 
 ## Feature Flags
 
@@ -121,79 +122,56 @@ TF_VAR_demo_web_app_image="us-docker.pkg.dev/cloudrun/container/hello"
 | Flag | Configurations | Default | Effect When `true` | Effect When `false` |
 |------|---------------|---------|-------------------|---------------------|
 | `enable_logging` | project-singleton | `true` | Creates logging bucket with 30-day retention | Skips logging bucket |
-| `enable_demo_web_app` | demo-vpc, core | varies | Creates all demo resources (Cloud Run, VPC, PSC, LB) | Skips demo resources |
+| `enable_demo_web_app` | demo-web-app, core | varies | Creates all demo resources (Cloud Run, VPC, PSC, LB) | Skips demo resources |
 | `enable_self_signed_cert` | project-singleton | `false` | Uses self-signed certificates (1-year) | Uses Google-managed certificates |
 | **`enable_waf`** | **core** | **`false`** | **Creates Cloud Armor security policy ($16-91/mo)** | **No Cloud Armor (saves cost)** |
 | **`enable_cloudflare_proxy`** | **core** | **`true`** | **Enables Cloudflare proxy, WAF, DDoS (free)** | **Direct DNS to GCP** |
-| **`enable_psc`** | **demo-vpc, core** | **`true`** | **Creates PSC resources (service attachment, PSC NEG)** | **Direct serverless NEG connection** |
-| **`enable_internal_alb`** | **demo-vpc, core** | **`true`** | **Creates Internal ALB and web VPC** | **External LB connects directly to Cloud Run** |
-| **`enable_shared_vpc`** | **demo-vpc, core** | **`false`** | **Configures as Shared VPC host project** | **Standalone VPC** |
+| **`enable_demo_web_app_psc_neg`** | **demo-web-app, core** | **`false`** | **Creates PSC resources (service attachment, PSC NEG)** | **Direct backend service connection** |
+| **`enable_demo_web_app_internal_alb`** | **demo-web-app** | **`true`** | **Creates Internal ALB and web VPC** | **External LB connects directly via backend service** |
 
 ### Connectivity Pattern Configuration
 
 Choose your connectivity pattern based on isolation and complexity requirements:
 
-#### Pattern 1: PSC with Internal ALB (Default - Maximum Isolation)
+#### Pattern 1: PSC with Internal ALB (Maximum Isolation)
 
 ```bash
-TF_VAR_enable_psc="true"
-TF_VAR_enable_internal_alb="true"
-TF_VAR_enable_shared_vpc="false"
+TF_VAR_enable_demo_web_app_psc_neg="true"
+TF_VAR_enable_demo_web_app_internal_alb="true"
 ```
 
 **Architecture:**
 - External HTTPS LB → PSC NEG → PSC Service Attachment → Internal ALB → Serverless NEG → Cloud Run
 
-**Use Case:** Multi-tenant, cross-project isolation, maximum security
+**Use Case:** Cross-project isolation, maximum security
 
 **Benefits:**
-- ✅ Complete VPC separation
+- ✅ Complete VPC separation via PSC
 - ✅ IP overlap allowed (PSC NAT)
 - ✅ Cross-project connectivity
 - ✅ Producer controls access
 
 **Cost:** ~$30/month
 
-#### Pattern 2: Direct Cloud Run (Simplest)
+#### Pattern 2: Direct Backend Service (Simplest - Default)
 
 ```bash
-TF_VAR_enable_psc="false"
-TF_VAR_enable_internal_alb="false"
-TF_VAR_enable_shared_vpc="false"
+TF_VAR_enable_demo_web_app_psc_neg="false"
+TF_VAR_enable_demo_web_app_internal_alb="true"
 ```
 
 **Architecture:**
-- External HTTPS LB → Serverless NEG (SERVERLESS) → Cloud Run
+- External HTTPS LB → Backend Service → Internal ALB → Serverless NEG → Cloud Run
 
-**Use Case:** Single-project, MVP, cost optimization
+**Use Case:** Single or cross-project, cost optimization
 
 **Benefits:**
-- ✅ Minimal resources
-- ✅ Fastest deployment
-- ✅ Simplest troubleshooting
+- ✅ Supports Internal ALB without PSC overhead
+- ✅ Faster deployment
+- ✅ Simpler troubleshooting
 - ✅ Lower cost
 
-**Cost:** ~$23/month
-
-#### Pattern 3: Shared VPC with Internal ALB
-
-```bash
-TF_VAR_enable_psc="false"
-TF_VAR_enable_internal_alb="true"
-TF_VAR_enable_shared_vpc="true"
-```
-
-**Architecture:**
-- External HTTPS LB → Internal ALB (via Shared VPC) → Serverless NEG → Cloud Run
-
-**Use Case:** Enterprise Shared VPC policies, organizational requirements
-
-**Benefits:**
-- ✅ Shared VPC compatibility
-- ✅ No PSC complexity
-- ✅ Internal load balancing
-
-**Cost:** ~$30/month
+**Cost:** ~$23-30/month
 
 ### Security Configuration Matrix
 
@@ -288,7 +266,7 @@ TF_VAR_enable_waf="false"
 
 Creates:
 - All project-singleton resources
-- Complete demo-vpc with Cloud Run
+- Complete demo-web-app with Cloud Run
 - Complete core with PSC connectivity
 - Cloudflare DNS record (proxied)
 - Cloudflare Origin CA certificates
@@ -303,9 +281,9 @@ Creates:
 |--------|--------------|---------------|---------|
 | Ingress subnet | 10.0.1.0/24 | core | Ingress VPC workloads |
 | External proxy-only | 10.0.98.0/24 | core | External ALB proxies (REGIONAL_MANAGED_PROXY) |
-| Web subnet | 10.0.3.0/24 | demo-vpc | Application workloads |
-| Internal proxy-only | 10.0.99.0/24 | demo-vpc | Internal ALB proxies (REGIONAL_MANAGED_PROXY) |
-| PSC NAT | 10.0.100.0/24 | demo-vpc | PSC NAT translation (PRIVATE_SERVICE_CONNECT) |
+| Web subnet | 10.0.3.0/24 | demo-web-app | Application workloads |
+| Internal proxy-only | 10.0.99.0/24 | demo-web-app | Internal ALB proxies (REGIONAL_MANAGED_PROXY) |
+| PSC NAT | 10.0.100.0/24 | demo-web-app | PSC NAT translation (PRIVATE_SERVICE_CONNECT) |
 
 **Important:** Ensure no CIDR overlap between configurations.
 

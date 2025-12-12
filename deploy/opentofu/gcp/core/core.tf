@@ -3,40 +3,9 @@
 # Local Variables #
 ###################
 locals {
-  project_suffix              = var.project_suffix
+  allowed_https_source_ranges = var.allowed_https_source_ranges
   cloudedge_github_repository = var.cloudedge_github_repository
-  region                      = var.region
   cloudflare_api_token        = var.cloudflare_api_token
-
-  project_id      = var.project_id != "" ? var.project_id : "${local.cloudedge_github_repository}-${local.project_suffix}"
-  host_project_id = "${local.project_id}-shared"
-  standard_tags = merge(
-    var.resource_tags,
-    {
-      "project"    = local.project_id
-      "managed-by" = "opentofu"
-    }
-  )
-
-  enable_logging = data.terraform_remote_state.singleton.outputs.enable_logging
-
-  root_domain                  = var.root_domain
-  demo_web_app_subdomain_name  = var.demo_web_app_subdomain_name
-  ingress_vpc_cidr_range       = var.ingress_vpc_cidr_range
-  demo_web_app_backend_name    = "demo-web-app-backend"
-  enable_demo_web_app          = var.enable_demo_web_app
-  allowed_https_source_ranges  = var.allowed_https_source_ranges
-  proxy_only_subnet_cidr_range = var.proxy_only_subnet_cidr_range
-  enable_self_signed_cert      = var.enable_self_signed_cert
-  enable_waf                   = var.enable_waf
-  enable_cloudflare_proxy      = var.enable_cloudflare_proxy
-  cloudflare_origin_ca_key     = var.cloudflare_origin_ca_key
-  # enable_psc                   = var.enable_psc
-  enable_psc          = var.enable_psc
-  enable_shared_vpc   = var.enable_shared_vpc
-  enable_internal_alb = var.enable_internal_alb
-  # Cloudflare IP ranges for firewall when proxy is enabled
-  # Source: https://www.cloudflare.com/ips/
   cloudflare_ipv4_ranges = [
     "173.245.48.0/20",
     "103.21.244.0/22",
@@ -54,7 +23,31 @@ locals {
     "172.64.0.0/13",
     "131.0.72.0/22"
   ]
-
+  cloudflare_origin_ca_key     = var.cloudflare_origin_ca_key
+  demo_web_app_backend_name    = "${var.demo_web_app_service_name}-backend"
+  demo_web_app_service_name    = var.demo_web_app_service_name
+  demo_web_app_subdomain_name  = var.demo_web_app_subdomain_name
+  demo_web_app_project_id      = var.demo_web_app_project_id != "" ? var.demo_web_app_project_id : local.project_id
+  enable_cloudflare_proxy      = var.enable_cloudflare_proxy
+  enable_demo_web_app          = var.enable_demo_web_app
+  enable_demo_web_app_psc_neg  = var.enable_demo_web_app_psc_neg
+  enable_logging               = data.terraform_remote_state.singleton.outputs.enable_logging
+  enable_psc                   = var.enable_psc
+  enable_waf                   = var.enable_waf
+  host_project_id              = "${local.project_id}-shared"
+  ingress_vpc_cidr_range       = var.ingress_vpc_cidr_range
+  project_id                   = var.cloudedge_project_id != "" ? var.cloudedge_project_id : "${local.cloudedge_github_repository}-${local.project_suffix}"
+  project_suffix               = var.project_suffix
+  proxy_only_subnet_cidr_range = var.proxy_only_subnet_cidr_range
+  region                       = var.region
+  root_domain                  = var.root_domain
+  standard_tags = merge(
+    var.resource_tags,
+    {
+      "project"    = local.project_id
+      "managed-by" = "opentofu"
+    }
+  )
 }
 
 ######################
@@ -95,12 +88,12 @@ data "terraform_remote_state" "singleton" {
   }
 }
 
-data "terraform_remote_state" "demo_vpc" {
+data "terraform_remote_state" "demo_web_app" {
   count   = local.enable_demo_web_app ? 1 : 0
   backend = "gcs"
   config = {
-    bucket = "${local.project_id}-tfstate"
-    prefix = "${local.project_id}-demo-vpc"
+    bucket = "${local.demo_web_app_project_id}-tfstate"
+    prefix = local.demo_web_app_service_name
   }
 }
 
@@ -433,17 +426,17 @@ resource "google_compute_firewall" "allow_ingress_vpc_https_ingress" {
   priority      = 1000
 }
 
-###########
-# PSC NEG #
-###########
+########################
+# Demo Web App PSC NEG #
+########################
 
 resource "google_compute_region_network_endpoint_group" "demo_web_app_psc_neg" {
-  count                 = local.enable_demo_web_app && local.enable_psc ? 1 : 0
+  count                 = local.enable_demo_web_app && local.enable_demo_web_app_psc_neg ? 1 : 0
   project               = local.project_id
   name                  = "demo-web-app-psc-neg"
   region                = local.region
   network_endpoint_type = "PRIVATE_SERVICE_CONNECT"
-  psc_target_service    = data.terraform_remote_state.demo_vpc[0].outputs.demo_web_app_psc_service_attachment_self_link
+  psc_target_service    = data.terraform_remote_state.demo_web_app[0].outputs.web_app_psc_service_attachment_self_link
 
   network    = google_compute_network.ingress_vpc.id
   subnetwork = google_compute_subnetwork.ingress_subnet.id
@@ -454,7 +447,7 @@ resource "google_compute_region_network_endpoint_group" "demo_web_app_psc_neg" {
 ######################################################
 
 resource "google_compute_region_backend_service" "demo_web_app_external_backend" {
-  count                 = local.enable_demo_web_app && local.enable_psc && local.enable_internal_alb ? 1 : 0
+  count                 = local.enable_demo_web_app && local.enable_demo_web_app_psc_neg ? 1 : 0
   project               = local.project_id
   region                = local.region
   name                  = "demo-web-app-external-backend"
@@ -480,7 +473,7 @@ resource "google_compute_region_backend_service" "demo_web_app_external_backend"
 resource "google_compute_region_url_map" "external_https_lb" {
   project         = local.project_id
   name            = "external-https-lb"
-  default_service = local.enable_internal_alb ? google_compute_region_backend_service.demo_web_app_external_backend[0].id : data.terraform_remote_state.demo_vpc[0].outputs.demo_web_app_backend_service_id
+  default_service = local.enable_demo_web_app_psc_neg ? google_compute_region_backend_service.demo_web_app_external_backend[0].id : data.terraform_remote_state.demo_web_app[0].outputs.web_app_backend_service_id
 }
 
 # HTTPS Proxy

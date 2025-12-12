@@ -13,11 +13,11 @@ This document provides detailed architecture documentation for Vibetics CloudEdg
 
 ## Current Architecture: Flexible Connectivity Patterns
 
-The infrastructure supports **three connectivity patterns** controlled by `enable_psc` and `enable_internal_alb` variables, all using **Cloudflare as the edge security layer** by default.
+The infrastructure supports **two connectivity patterns** controlled by `enable_demo_web_app_psc_neg` variable, all using **Cloudflare as the edge security layer** by default.
 
-### Pattern 1: PSC with Internal ALB (Default - Maximum Isolation)
+### Pattern 1: PSC with Internal ALB (Maximum Isolation)
 
-**Configuration:** `enable_psc=true, enable_internal_alb=true`
+**Configuration:** `enable_demo_web_app_psc_neg=true` (in both core and demo-web-app)
 
 **Traffic Flow:**
 
@@ -47,7 +47,7 @@ PSC Network Endpoint Group (PSC NEG)
     | Private Service Connect
     |
     v
-PSC Service Attachment (demo-vpc)
+PSC Service Attachment (demo-web-app)
     |
     v
 Internal HTTPS Load Balancer (INTERNAL_MANAGED)
@@ -71,9 +71,9 @@ Cloud Run Service (demo-web-app)
 - Additional complexity (two VPCs, PSC setup)
 - Additional resources (Internal ALB, PSC NAT subnet)
 
-### Pattern 2: Direct Cloud Run (Simplest)
+### Pattern 2: Direct Backend Service (Simplest - Default)
 
-**Configuration:** `enable_psc=false, enable_internal_alb=false`
+**Configuration:** `enable_demo_web_app_psc_neg=false`
 
 **Traffic Flow:**
 
@@ -98,7 +98,10 @@ Regional External HTTPS Load Balancer (GCP)
 Ingress VPC Firewall (Cloudflare IPs only)
     |
     v
-Serverless NEG (SERVERLESS type, not PSC)
+Backend Service (EXTERNAL_MANAGED or INTERNAL_MANAGED)
+    |
+    v
+Serverless NEG (SERVERLESS type)
     |
     v
 Cloud Run Service (demo-web-app)
@@ -106,69 +109,17 @@ Cloud Run Service (demo-web-app)
 ```
 
 **Benefits:**
-- ✅ Simplest architecture (minimal resources)
-- ✅ Lower cost (no Internal ALB, no PSC setup)
-- ✅ Single-project deployment
+- ✅ Simplest architecture (minimal resources when PSC disabled)
+- ✅ Lower cost (no PSC setup overhead)
+- ✅ Supports both single-project and cross-project deployments
 - ✅ Faster deployment
 - ✅ Easier troubleshooting
 
 **Trade-offs:**
-- No VPC isolation (external LB connects directly to Cloud Run)
-- Cannot use different GCP projects for ingress and application
-- No PSC-based multi-tenancy support
+- When PSC disabled: No complete VPC isolation
+- When PSC disabled: Cannot use different GCP projects for maximum isolation
 
-**Use case:** Single-project deployments, MVPs, cost-sensitive applications
-
-### Pattern 3: Shared VPC with Internal ALB
-
-**Configuration:** `enable_psc=false, enable_internal_alb=true, enable_shared_vpc=true`
-
-**Traffic Flow:**
-
-```
-Internet
-    |
-    v
-Cloudflare Global Network (proxied = true)
-    |
-    +---> Cloudflare WAF (OWASP Top 10, free)
-    +---> Cloudflare DDoS Protection (free)
-    +---> Cloudflare SSL/TLS Termination
-    |
-    | Cloudflare Origin Certificate (15-year, RSA 2048)
-    |
-    v
-Regional External HTTPS Load Balancer (GCP)
-    |
-    +---> Regional Backend Service (EXTERNAL_MANAGED)
-    |     (connects to Internal ALB via Shared VPC)
-    |
-    v
-Ingress VPC Firewall (Cloudflare IPs only)
-    |
-    v
-Internal HTTPS Load Balancer (INTERNAL_MANAGED)
-    |
-    v
-Serverless NEG
-    |
-    v
-Cloud Run Service (demo-web-app)
-    | Ingress: INTERNAL_LOAD_BALANCER only
-```
-
-**Benefits:**
-- ✅ Shared VPC compatibility
-- ✅ Organizational policy compliance
-- ✅ Internal load balancing benefits
-- ✅ No PSC complexity
-
-**Trade-offs:**
-- Shared VPC setup required
-- No cross-project isolation like PSC
-- IP address planning required (no overlap allowed)
-
-**Use case:** Organizations with existing Shared VPC policies, enterprise deployments
+**Use case:** Single-project deployments, MVPs, cost-sensitive applications, or cross-project with Internal ALB only
 
 ## Architecture Options
 
@@ -350,16 +301,16 @@ google_compute_region_ssl_certificate.external_https_lb_cert
 
 ### When to Choose Each Pattern
 
-| Criteria | Pattern 1: PSC + Internal ALB | Pattern 2: Direct Cloud Run | Pattern 3: Shared VPC + Internal ALB |
-|----------|-------------------------------|----------------------------|-------------------------------------|
-| **Use Case** | Multi-tenant, cross-project isolation | Single-project, MVP, cost-optimized | Enterprise Shared VPC policies |
-| **Complexity** | High (two VPCs, PSC, Internal ALB) | Low (minimal resources) | Medium (Shared VPC setup) |
-| **Cost** | Highest (~$30/month with Internal ALB) | Lowest (~$23/month) | Medium (~$30/month) |
-| **Network Isolation** | Maximum (complete VPC separation) | Minimal (single VPC) | Medium (Shared VPC) |
-| **IP Overlap** | Allowed (PSC NAT) | N/A (single network) | Not allowed |
-| **Cross-Project** | Yes (via PSC) | No | Yes (via Shared VPC) |
-| **Setup Time** | Slowest | Fastest | Medium |
-| **Scalability** | 1000+ consumers | Single consumer | Limited by Shared VPC quota |
+| Criteria | Pattern 1: PSC + Internal ALB | Pattern 2: Direct Backend Service |
+|----------|-------------------------------|-----------------------------------|
+| **Use Case** | Cross-project isolation, maximum security | Single or cross-project, cost-optimized |
+| **Complexity** | High (two VPCs, PSC, Internal ALB) | Low to Medium (VPC + Internal ALB optional) |
+| **Cost** | Highest (~$30/month with Internal ALB + PSC) | Lower (~$23-30/month) |
+| **Network Isolation** | Maximum (complete VPC separation via PSC) | Medium (VPC-based, no PSC isolation) |
+| **IP Overlap** | Allowed (PSC NAT) | Not allowed (direct VPC connectivity) |
+| **Cross-Project** | Yes (via PSC with maximum isolation) | Yes (via cross-project backend service) |
+| **Setup Time** | Slowest | Faster |
+| **Scalability** | 1000+ PSC consumers | Limited by backend service quota |
 
 ### Connectivity: Private Service Connect (PSC)
 
@@ -386,8 +337,9 @@ google_compute_region_ssl_certificate.external_https_lb_cert
 
 ```
 +------------------+          +------------------+
-|    CORE (Ingress)|          |    DEMO-VPC      |
-|  deploy/...core  |          |  deploy/...demo  |
+|    CORE (Ingress)|          |  DEMO-WEB-APP    |
+|  deploy/...core  |          | deploy/...demo-  |
+|                  |          |     web-app      |
 +------------------+          +------------------+
 |                  |          |                  |
 | Ingress VPC      |   PSC    | Web VPC          |
@@ -469,9 +421,9 @@ source_ranges = var.allowed_https_source_ranges  # Default: ["0.0.0.0/0"]
 - `external_https_lb_cert_id` - SSL certificate ID (used when Cloudflare proxy disabled)
 - `enable_logging` - Logging status
 
-### Layer 2: Demo VPC (Application Layer)
+### Layer 2: Demo Web App (Application Layer)
 
-**Location**: `deploy/opentofu/gcp/demo-vpc/`
+**Location**: `deploy/opentofu/gcp/demo-web-app/`
 
 **Purpose**: Backend application VPC with PSC service attachment
 
@@ -489,9 +441,9 @@ source_ranges = var.allowed_https_source_ranges  # Default: ["0.0.0.0/0"]
 | `google_compute_forwarding_rule` | Internal forwarding rule |
 | `google_compute_service_attachment` | PSC producer endpoint |
 
-**Remote State Key**: `${project_id}-demo-vpc`
+**Remote State Key**: `demo-web-app`
 
-**Output**: `demo_web_app_psc_service_attachment_self_link` (consumed by core)
+**Output**: `web_app_psc_service_attachment_self_link` (consumed by core)
 
 ### Layer 3: Core (Ingress Layer)
 
@@ -511,8 +463,8 @@ source_ranges = var.allowed_https_source_ranges  # Default: ["0.0.0.0/0"]
 | `tls_cert_request.cloudflare_origin_csr` | Certificate signing request | `enable_cloudflare_proxy = true` |
 | `cloudflare_origin_ca_certificate.origin_cert` | Cloudflare Origin CA cert | `enable_cloudflare_proxy = true` |
 | `google_compute_region_ssl_certificate.cloudflare_origin_cert` | Upload Cloudflare cert to GCP | `enable_cloudflare_proxy = true` |
-| `google_compute_region_network_endpoint_group` | PSC NEG (consumer) | `enable_demo_web_app = true` |
-| `google_compute_region_backend_service` | External backend service | `enable_demo_web_app = true` |
+| `google_compute_region_network_endpoint_group` | PSC NEG (consumer) | `enable_demo_web_app = true AND enable_demo_web_app_psc_neg = true` |
+| `google_compute_region_backend_service` | External backend service | `enable_demo_web_app = true AND enable_demo_web_app_psc_neg = true` |
 | `google_compute_region_url_map` | External LB URL routing | Always |
 | `google_compute_region_target_https_proxy` | External HTTPS proxy | Always |
 | `google_compute_forwarding_rule` | External forwarding rule | Always |
@@ -520,7 +472,7 @@ source_ranges = var.allowed_https_source_ranges  # Default: ["0.0.0.0/0"]
 
 **Remote State Dependencies**:
 - Reads `singleton` for `enable_logging`, `external_https_lb_cert_id`
-- Reads `demo-vpc` for `demo_web_app_psc_service_attachment_self_link`
+- Reads `demo-web-app` for `web_app_psc_service_attachment_self_link`
 
 ## Cloud Armor WAF Rules
 
