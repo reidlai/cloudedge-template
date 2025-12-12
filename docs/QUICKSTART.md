@@ -173,7 +173,7 @@ This creates:
 
 - GCS bucket: `${TF_VAR_project_id}-tfstate`
 - Backend config files for each configuration
-- State prefixes: `${project_id}-singleton`, `${project_id}-demo-vpc`, `${project_id}-core`
+- State prefixes: `${project_id}-singleton`, `demo-web-app`, `${project_id}-core`
 
 ## Deployment
 
@@ -189,7 +189,7 @@ source .env
 This deploys:
 
 1. `project-singleton` - Billing, logging, API enablement
-2. `demo-vpc` - Web VPC, Cloud Run, Internal ALB, PSC producer
+2. `demo-web-app` - Web VPC, Cloud Run, Internal ALB, PSC producer
 3. `core` - Ingress VPC, WAF, External LB, PSC consumer, DNS
 
 ### Manual Deployment
@@ -204,12 +204,12 @@ cd deploy/opentofu/gcp/project-singleton
 tofu init -backend-config=backend-config.hcl
 tofu apply
 
-# 2. Demo VPC (requires project-singleton)
-cd ../demo-vpc
+# 2. Demo Web App (requires project-singleton)
+cd ../demo-web-app
 tofu init -backend-config=backend-config.hcl
 tofu apply
 
-# 3. Core (requires demo-vpc)
+# 3. Core (requires demo-web-app)
 cd ../core
 tofu init -backend-config=backend-config.hcl
 tofu apply
@@ -240,7 +240,7 @@ Or manually:
 
 ```bash
 cd deploy/opentofu/gcp/core && tofu destroy
-cd ../demo-vpc && tofu destroy
+cd ../demo-web-app && tofu destroy
 cd ../project-singleton && tofu destroy
 ```
 
@@ -274,7 +274,7 @@ gsutil ls gs://${TF_VAR_project_id}-tfstate/
 
 # Deploy in order
 cd project-singleton && tofu apply
-cd ../demo-vpc && tofu apply
+cd ../demo-web-app && tofu apply
 cd ../core && tofu apply
 ```
 
@@ -284,11 +284,11 @@ cd ../core && tofu apply
 Error: Error creating NetworkEndpointGroup: service attachment not found
 ```
 
-**Solution**: Verify demo-vpc is deployed and PSC service attachment exists:
+**Solution**: Verify demo-web-app is deployed and PSC service attachment exists:
 
 ```bash
-cd deploy/opentofu/gcp/demo-vpc
-tofu output demo_web_app_psc_service_attachment_self_link
+cd deploy/opentofu/gcp/demo-web-app
+tofu output web_app_psc_service_attachment_self_link
 ```
 
 ### Cloudflare API Error

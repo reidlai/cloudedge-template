@@ -7,7 +7,7 @@ This document provides a complete reference of GCP resources managed by each Ope
 ```
 deploy/opentofu/gcp/
 ├── project-singleton/    # Project-level resources
-├── demo-vpc/             # Backend application VPC
+├── demo-web-app/         # Backend application VPC
 └── core/                 # Ingress infrastructure
 ```
 
@@ -109,13 +109,13 @@ The singleton configuration manages SSL certificates using a **dual-path strateg
 
 ---
 
-## Demo VPC
+## Demo Web App
 
-**Location**: `deploy/opentofu/gcp/demo-vpc/`
+**Location**: `deploy/opentofu/gcp/demo-web-app/`
 
 **Purpose**: Backend application VPC with Cloud Run service and PSC service attachment.
 
-**Remote State Prefix**: `${project_id}-demo-vpc`
+**Remote State Prefix**: `demo-web-app`
 
 **Dependencies**: Reads from `project-singleton` remote state
 
@@ -131,15 +131,15 @@ The singleton configuration manages SSL certificates using a **dual-path strateg
 
 | Resource | Description | Conditional |
 |----------|-------------|-------------|
-| `google_compute_network.web_vpc` | Application VPC (auto_create_subnetworks: false) | `enable_demo_web_app = true AND enable_internal_alb = true` |
+| `google_compute_network.web_vpc` | Application VPC (auto_create_subnetworks: false) | `enable_demo_web_app = true AND (enable_demo_web_app_internal_alb = true OR enable_demo_web_app_psc_neg = true)` |
 
 ### Subnets
 
 | Resource | CIDR | Purpose | Conditional |
 |----------|------|---------|-------------|
-| `google_compute_subnetwork.web_subnet` | 10.0.3.0/24 | Cloud Run and workloads | `enable_demo_web_app = true AND enable_internal_alb = true` |
-| `google_compute_subnetwork.proxy_only_subnet` | 10.0.99.0/24 | Internal ALB proxy-only (REGIONAL_MANAGED_PROXY) | `enable_demo_web_app = true AND enable_internal_alb = true` |
-| `google_compute_subnetwork.psc_nat_subnet` | 10.0.100.0/24 | PSC NAT (PRIVATE_SERVICE_CONNECT) | `enable_psc = true` |
+| `google_compute_subnetwork.web_subnet` | 10.0.3.0/24 | Cloud Run and workloads | `enable_demo_web_app = true AND (enable_demo_web_app_internal_alb = true OR enable_demo_web_app_psc_neg = true)` |
+| `google_compute_subnetwork.proxy_only_subnet` | 10.0.99.0/24 | Internal ALB proxy-only (REGIONAL_MANAGED_PROXY) | `enable_demo_web_app = true AND (enable_demo_web_app_internal_alb = true OR enable_demo_web_app_psc_neg = true)` |
+| `google_compute_subnetwork.psc_nat_subnet` | 10.0.100.0/24 | PSC NAT (PRIVATE_SERVICE_CONNECT) | `enable_demo_web_app_psc_neg = true` |
 
 **Subnet Configuration**:
 - `web_subnet`: Private Google Access enabled (CIS GCP 3.9)
@@ -169,8 +169,8 @@ The singleton configuration manages SSL certificates using a **dual-path strateg
 | `google_compute_region_network_endpoint_group.demo_web_app` | NEG for Cloud Run (type varies by configuration) | `enable_demo_web_app = true` |
 
 **NEG Configuration**:
-- When `enable_psc = true`: Type = `PRIVATE_SERVICE_CONNECT`
-- When `enable_psc = false`: Type = `SERVERLESS`
+- When `enable_demo_web_app_psc_neg = true` AND cross-project (`cloudedge_project_id != demo_web_app_project_id`): Type = `PRIVATE_SERVICE_CONNECT`
+- Otherwise: Type = `SERVERLESS`
 - Cloud Run service reference: Always points to `demo_web_app` service
 
 ### Backend Service
@@ -180,25 +180,25 @@ The singleton configuration manages SSL certificates using a **dual-path strateg
 | `google_compute_region_backend_service.demo_web_app_backend` | Backend service for Cloud Run | `enable_demo_web_app = true` |
 
 **Backend Service Configuration**:
-- When `enable_internal_alb = true`: Scheme = `INTERNAL_MANAGED`
-- When `enable_internal_alb = false`: Scheme = `EXTERNAL_MANAGED`
+- When `enable_demo_web_app_internal_alb = true` OR `enable_demo_web_app_psc_neg = true`: Scheme = `INTERNAL_MANAGED`
+- Otherwise: Scheme = `EXTERNAL_MANAGED`
 - Protocol: HTTPS
 - Timeout: 30 seconds
-- Backend: NEG (type determined by `enable_psc`)
+- Backend: NEG (type determined by `enable_demo_web_app_psc_neg`)
 
 ### Internal Load Balancer
 
 | Resource | Description | Conditional |
 |----------|-------------|-------------|
-| `google_compute_region_url_map.internal_alb_url_map` | URL routing for internal ALB | `enable_demo_web_app = true AND enable_internal_alb = true` |
-| `google_compute_region_target_https_proxy.internal_alb_https_proxy` | HTTPS proxy with SSL certificate | `enable_demo_web_app = true AND enable_internal_alb = true` |
-| `google_compute_forwarding_rule.internal_alb_forwarding_rule` | Internal forwarding rule (port 443) | `enable_demo_web_app = true AND enable_internal_alb = true` |
+| `google_compute_region_url_map.internal_alb_url_map` | URL routing for internal ALB | `enable_demo_web_app = true AND (enable_demo_web_app_internal_alb = true OR enable_demo_web_app_psc_neg = true)` |
+| `google_compute_region_target_https_proxy.internal_alb_https_proxy` | HTTPS proxy with SSL certificate | `enable_demo_web_app = true AND (enable_demo_web_app_internal_alb = true OR enable_demo_web_app_psc_neg = true)` |
+| `google_compute_forwarding_rule.internal_alb_forwarding_rule` | Internal forwarding rule (port 443) | `enable_demo_web_app = true AND (enable_demo_web_app_internal_alb = true OR enable_demo_web_app_psc_neg = true)` |
 
 **Load Balancer Configuration** (when enabled):
 - Scheme: INTERNAL_MANAGED (internal to VPC only)
 - Protocol: HTTPS
 - Port: 443
-- Backend: Backend service (scheme depends on `enable_internal_alb`)
+- Backend: Backend service
 - Network: web_vpc
 - Subnetwork: web_subnet
 
@@ -206,9 +206,9 @@ The singleton configuration manages SSL certificates using a **dual-path strateg
 
 | Resource | Description | Conditional |
 |----------|-------------|-------------|
-| `tls_private_key.self_signed_cert_key` | RSA 2048-bit private key | `enable_demo_web_app = true AND enable_internal_alb = true` |
-| `tls_self_signed_cert.self_signed_cert` | Self-signed certificate (1-year validity) | `enable_demo_web_app = true AND enable_internal_alb = true` |
-| `google_compute_region_ssl_certificate.internal_alb_cert_binding` | Regional SSL certificate binding | `enable_demo_web_app = true AND enable_internal_alb = true` |
+| `tls_private_key.self_signed_cert_key` | RSA 2048-bit private key | `enable_demo_web_app = true AND (enable_demo_web_app_internal_alb = true OR enable_demo_web_app_psc_neg = true)` |
+| `tls_self_signed_cert.self_signed_cert` | Self-signed certificate (1-year validity) | `enable_demo_web_app = true AND (enable_demo_web_app_internal_alb = true OR enable_demo_web_app_psc_neg = true)` |
+| `google_compute_region_ssl_certificate.internal_alb_cert_binding` | Regional SSL certificate binding | `enable_demo_web_app = true AND (enable_demo_web_app_internal_alb = true OR enable_demo_web_app_psc_neg = true)` |
 
 **Certificate Configuration**:
 - Common Name: `internal-alb.local`
@@ -220,22 +220,21 @@ The singleton configuration manages SSL certificates using a **dual-path strateg
 
 | Resource | Description | Conditional |
 |----------|-------------|-------------|
-| `google_compute_service_attachment.demo_web_app_psc_attachment` | PSC service attachment (producer) | `enable_psc = true` |
+| `google_compute_service_attachment.demo_web_app_psc_attachment` | PSC service attachment (producer) | `enable_demo_web_app_psc_neg = true` |
 
 **PSC Configuration** (when enabled):
 - Connection preference: `ACCEPT_AUTOMATIC` (automatic approval)
 - Proxy protocol: disabled
 - Target: Internal ALB forwarding rule
 - NAT subnets: `psc_nat_subnet`
-- Reconcile connections: true
 
 ### Outputs
 
 | Output | Description | Conditional |
 |--------|-------------|-------------|
-| `demo_web_app_psc_service_attachment_self_link` | PSC service attachment ID for consumers (core configuration) | Returns value only when `enable_psc = true`, otherwise `null` |
-| `demo_web_app_backend_service_id` | Backend service ID | Always returned when `enable_demo_web_app = true` |
-| `psc_enabled` | Indicates if PSC is enabled | Boolean value |
+| `web_app_psc_service_attachment_self_link` | PSC service attachment ID for consumers (core configuration) | Returns value only when `enable_demo_web_app_psc_neg = true`, otherwise `null` |
+| `web_app_backend_service_id` | Backend service ID | Always returned when `enable_demo_web_app = true` |
+| `psc_enabled` | Indicates if PSC is enabled | Boolean value (reflects `enable_demo_web_app_psc_neg`) |
 
 ---
 
@@ -249,7 +248,7 @@ The singleton configuration manages SSL certificates using a **dual-path strateg
 
 **Dependencies**:
 - Reads from `project-singleton` for `enable_logging`, `external_https_lb_cert_id`
-- Reads from `demo-vpc` for `demo_web_app_psc_service_attachment_self_link`
+- Reads from `demo-web-app` for `web_app_psc_service_attachment_self_link`
 
 ### Providers
 
@@ -387,30 +386,30 @@ The singleton configuration manages SSL certificates using a **dual-path strateg
 
 ### PSC Consumer
 
-**Condition**: `enable_demo_web_app = true AND enable_psc = true AND enable_internal_alb = true`
+**Condition**: `enable_demo_web_app = true AND enable_demo_web_app_psc_neg = true`
 
 | Resource | Description |
 |----------|-------------|
 | `google_compute_region_network_endpoint_group.demo_web_app_psc_neg` | PSC NEG (consumer) |
 
-**PSC NEG Configuration** (when PSC enabled):
+**PSC NEG Configuration** (when PSC NEG enabled):
 - Type: `PRIVATE_SERVICE_CONNECT`
-- Target: `demo_web_app_psc_service_attachment_self_link` (from demo-vpc remote state)
+- Target: `web_app_psc_service_attachment_self_link` (from demo-web-app remote state)
 - Network: `ingress_vpc`
 - Subnetwork: `ingress_subnet`
 
-**Note:** When `enable_psc = false`, no PSC NEG is created. The external load balancer connects directly to the backend service in demo-vpc.
+**Note:** When `enable_demo_web_app_psc_neg = false`, no PSC NEG is created. The external load balancer connects directly to the backend service in demo-web-app.
 
 ### External Load Balancer
 
 | Resource | Description | Conditional |
 |----------|-------------|-------------|
-| `google_compute_region_backend_service.demo_web_app_external_backend` | External backend service | `enable_demo_web_app = true AND enable_psc = true AND enable_internal_alb = true` |
+| `google_compute_region_backend_service.demo_web_app_external_backend` | External backend service | `enable_demo_web_app = true AND enable_demo_web_app_psc_neg = true` |
 | `google_compute_region_url_map.external_https_lb` | URL routing for external LB | Always |
 | `google_compute_region_target_https_proxy.external_https_lb` | HTTPS proxy with dynamic SSL certs | Always |
 | `google_compute_forwarding_rule.external_https_lb` | External forwarding rule (port 443) | Always |
 
-**Backend Service Configuration** (when PSC + Internal ALB enabled):
+**Backend Service Configuration** (when PSC NEG enabled):
 - Scheme: `EXTERNAL_MANAGED` (regional external ALB)
 - Protocol: HTTPS
 - Port Name: https
@@ -423,9 +422,9 @@ The singleton configuration manages SSL certificates using a **dual-path strateg
 - Capacity Scaler: 1.0
 
 **URL Map Configuration**:
-- Default service depends on `enable_internal_alb`:
-  - When `enable_internal_alb = true`: Points to `demo_web_app_external_backend` (via PSC)
-  - When `enable_internal_alb = false`: Points directly to `demo_web_app_backend_service_id` from demo-vpc
+- Default service depends on `enable_demo_web_app_psc_neg`:
+  - When `enable_demo_web_app_psc_neg = true`: Points to `demo_web_app_external_backend` (via PSC)
+  - When `enable_demo_web_app_psc_neg = false`: Points directly to `web_app_backend_service_id` from demo-web-app
 
 **HTTPS Proxy Configuration**:
 - **Dynamic SSL Certificates**:
@@ -451,8 +450,7 @@ The singleton configuration manages SSL certificates using a **dual-path strateg
 | `cloudflare_proxy_enabled` | Cloudflare proxy status | bool |
 | `cloud_armor_enabled` | Cloud Armor WAF status | bool |
 | `cloudflare_origin_cert_id` | Cloudflare origin cert ID (null if proxy disabled) | string |
-| `psc_enabled` | Indicates if PSC is enabled | bool |
-| `internal_alb_enabled` | Indicates if Internal ALB is enabled | bool |
+| `psc_enabled` | Indicates if PSC is enabled (reflects `enable_demo_web_app_psc_neg`) | bool |
 
 ---
 
@@ -463,17 +461,17 @@ project-singleton
         |
         | (terraform_remote_state: enable_logging, external_https_lb_cert_id)
         v
-    demo-vpc
+    demo-web-app
         |
-        | (terraform_remote_state: demo_web_app_psc_service_attachment_self_link)
+        | (terraform_remote_state: web_app_psc_service_attachment_self_link)
         v
       core
 ```
 
 **Dependency Chain**:
 1. `project-singleton` has no dependencies
-2. `demo-vpc` reads singleton outputs (optional, for logging configuration)
-3. `core` reads both singleton and demo-vpc outputs
+2. `demo-web-app` reads singleton outputs (optional, for logging configuration)
+3. `core` reads both singleton and demo-web-app outputs
 
 ## Conditional Resources Summary
 
@@ -483,15 +481,14 @@ Resources created based on feature flags:
 |------|--------------|-------------------|
 | `enable_logging` | project-singleton | `google_logging_project_bucket_config.logs_bucket` |
 | `enable_self_signed_cert` | project-singleton | Self-signed cert resources vs managed cert |
-| `enable_demo_web_app` | demo-vpc, core | All Cloud Run, VPC, NEG, PSC, LB resources |
+| `enable_demo_web_app` | demo-web-app, core | All Cloud Run, VPC, NEG, PSC, LB resources |
 | `enable_waf` | core | `google_compute_region_security_policy.edge_waf_policy` |
 | `enable_cloudflare_proxy` | core | Cloudflare origin cert resources, DNS proxy setting, firewall source ranges |
-| **`enable_psc`** | **demo-vpc, core** | **PSC service attachment, PSC NAT subnet, PSC NEG consumer** |
-| **`enable_internal_alb`** | **demo-vpc, core** | **Web VPC, Internal ALB, proxy-only subnet, external backend service** |
-| **`enable_shared_vpc`** | **demo-vpc, core** | **Shared VPC host project configuration** |
+| **`enable_demo_web_app_psc_neg`** | **demo-web-app, core** | **PSC service attachment, PSC NAT subnet, PSC NEG consumer** |
+| **`enable_demo_web_app_internal_alb`** | **demo-web-app** | **Web VPC (when no PSC), Internal ALB, proxy-only subnet** |
 
 **When `enable_demo_web_app = false`**:
-- demo-vpc creates **no resources** (all have `count = 0`)
+- demo-web-app creates **no resources** (all have `count = 0`)
 - core PSC NEG and backend service are **not created**
 - Only ingress VPC, firewall, DNS, and external LB URL map/proxy/forwarding rule are created
 
@@ -512,39 +509,31 @@ Resources created based on feature flags:
 - Firewall uses `allowed_https_source_ranges` variable
 - HTTPS proxy uses singleton certificate (self-signed or managed)
 
-**When `enable_psc = true`** (default):
-- PSC service attachment created in demo-vpc
+**When `enable_demo_web_app_psc_neg = true`**:
+- PSC service attachment created in demo-web-app
 - PSC NAT subnet created (10.0.100.0/24)
 - PSC NEG consumer created in core
-- NEG type = `PRIVATE_SERVICE_CONNECT`
-- Enables cross-project connectivity
+- Web VPC and Internal ALB resources created
+- NEG type = `PRIVATE_SERVICE_CONNECT` (when cross-project)
+- Enables maximum cross-project isolation
 
-**When `enable_psc = false`**:
+**When `enable_demo_web_app_psc_neg = false`** (default):
 - No PSC resources created
 - NEG type = `SERVERLESS` (direct Cloud Run connection)
 - No PSC NAT subnet
-- Simplified single-project architecture
+- Backend service connects directly to Cloud Run
 
-**When `enable_internal_alb = true`** (default):
-- Web VPC created in demo-vpc
+**When `enable_demo_web_app_internal_alb = true`** (default):
+- Web VPC created in demo-web-app (if not already created by PSC NEG)
 - Internal ALB resources created (URL map, HTTPS proxy, forwarding rule)
 - Proxy-only subnet created (10.0.99.0/24)
-- External backend service created in core (connects to Internal ALB)
 - Backend service scheme = `INTERNAL_MANAGED`
 
-**When `enable_internal_alb = false`**:
+**When `enable_demo_web_app_internal_alb = false`** AND `enable_demo_web_app_psc_neg = false`**:
 - No Web VPC created
 - No Internal ALB resources
 - Backend service scheme = `EXTERNAL_MANAGED`
 - External LB connects directly to Cloud Run backend service
-
-**When `enable_shared_vpc = true`**:
-- Ingress VPC configured as Shared VPC host project
-- Allows service projects to attach
-- Organizational policy compliance
-
-**When `enable_shared_vpc = false`** (default):
-- Standard standalone VPC configuration
 
 ## Resource Counts by Configuration
 
@@ -553,77 +542,62 @@ Resources created based on feature flags:
 enable_demo_web_app = false
 ```
 - **project-singleton**: 5-6 resources (depending on logging)
-- **demo-vpc**: 0 resources
+- **demo-web-app**: 0 resources
 - **core**: ~8 resources (networking only)
 - **Total**: ~13-14 resources
 
-### Pattern 1: PSC with Internal ALB (Default - Maximum Isolation)
+### Pattern 1: PSC with Internal ALB (Maximum Isolation)
 ```hcl
-enable_demo_web_app     = true
-enable_psc              = true
-enable_internal_alb     = true
-enable_cloudflare_proxy = true
-enable_waf              = false
+enable_demo_web_app             = true
+enable_demo_web_app_psc_neg     = true
+enable_demo_web_app_internal_alb = true
+enable_cloudflare_proxy         = true
+enable_waf                      = false
 ```
 - **project-singleton**: 5-6 resources
-- **demo-vpc**: ~13 resources (VPC, subnets, Cloud Run, Internal ALB, PSC service attachment)
+- **demo-web-app**: ~13 resources (VPC, subnets, Cloud Run, Internal ALB, PSC service attachment)
 - **core**: ~18 resources (including PSC NEG, external backend service, Cloudflare origin cert)
 - **Total**: ~36-37 resources
 - **Cost**: ~$30/month
 
-### Pattern 2: Direct Cloud Run (Simplest)
+### Pattern 2: Direct Backend Service (Simplest - Default)
 ```hcl
-enable_demo_web_app     = true
-enable_psc              = false
-enable_internal_alb     = false
-enable_cloudflare_proxy = true
-enable_waf              = false
+enable_demo_web_app             = true
+enable_demo_web_app_psc_neg     = false
+enable_demo_web_app_internal_alb = true
+enable_cloudflare_proxy         = true
+enable_waf                      = false
 ```
 - **project-singleton**: 5-6 resources
-- **demo-vpc**: ~3 resources (Cloud Run, serverless NEG, backend service)
+- **demo-web-app**: ~10 resources (VPC, subnets, Cloud Run, Internal ALB, serverless NEG, backend service)
 - **core**: ~13 resources (no PSC NEG, no external backend service)
-- **Total**: ~21-22 resources
-- **Cost**: ~$23/month
-
-### Pattern 3: Shared VPC with Internal ALB
-```hcl
-enable_demo_web_app     = true
-enable_psc              = false
-enable_internal_alb     = true
-enable_shared_vpc       = true
-enable_cloudflare_proxy = true
-enable_waf              = false
-```
-- **project-singleton**: 5-6 resources
-- **demo-vpc**: ~10 resources (VPC, subnets, Cloud Run, Internal ALB, no PSC)
-- **core**: ~15 resources (Shared VPC config, no PSC NEG)
-- **Total**: ~30-31 resources
-- **Cost**: ~$30/month
+- **Total**: ~28-29 resources
+- **Cost**: ~$23-30/month
 
 ### GCP Edge with PSC (Cloud Armor WAF)
 ```hcl
-enable_demo_web_app     = true
-enable_psc              = true
-enable_internal_alb     = true
-enable_cloudflare_proxy = false
-enable_waf              = true
+enable_demo_web_app             = true
+enable_demo_web_app_psc_neg     = true
+enable_demo_web_app_internal_alb = true
+enable_cloudflare_proxy         = false
+enable_waf                      = true
 ```
 - **project-singleton**: 5-6 resources
-- **demo-vpc**: ~13 resources
+- **demo-web-app**: ~13 resources
 - **core**: ~17 resources (Cloud Armor, singleton cert, PSC)
 - **Total**: ~35-36 resources
 - **Cost**: ~$46-121/month
 
 ### Defense-in-Depth with PSC (Dual WAF)
 ```hcl
-enable_demo_web_app     = true
-enable_psc              = true
-enable_internal_alb     = true
-enable_cloudflare_proxy = true
-enable_waf              = true
+enable_demo_web_app             = true
+enable_demo_web_app_psc_neg     = true
+enable_demo_web_app_internal_alb = true
+enable_cloudflare_proxy         = true
+enable_waf                      = true
 ```
 - **project-singleton**: 5-6 resources
-- **demo-vpc**: ~13 resources
+- **demo-web-app**: ~13 resources
 - **core**: ~19 resources (Cloudflare cert + Cloud Armor + PSC)
 - **Total**: ~37-38 resources
 - **Cost**: ~$46-121/month
@@ -635,7 +609,7 @@ enable_waf              = true
 | **project-singleton** | Billing budget | $0 (alerting only) |
 | | Logging (30-day retention) | ~$0-5 (low log volume) |
 | | SSL certificates | $0 (self-signed or Cloudflare) |
-| **demo-vpc** | VPC & Subnets | $0 (no charges for VPC) |
+| **demo-web-app** | VPC & Subnets | $0 (no charges for VPC) |
 | | Cloud Run (scale to zero) | $0 when idle |
 | | Internal Load Balancer | ~$7/month (forwarding rule) |
 | | PSC Service Attachment | $0 (no data transfer charges within region) |

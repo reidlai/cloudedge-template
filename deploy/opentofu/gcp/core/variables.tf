@@ -1,6 +1,6 @@
-#############
-# Variables #
-#############
+#####################
+# Project Variables #
+#####################
 
 variable "project_suffix" {
   description = "Project suffix (nonprod or prod). Combined with cloudedge_github_repository to form project_id."
@@ -11,18 +11,13 @@ variable "project_suffix" {
   }
 }
 
-variable "cloudedge_github_repository" {
-  description = "The GitHub repository name for the Cloud Edge project excluding owner name"
-  type        = string
-}
-
 variable "region" {
   description = "The primary GCP region for regional resources."
   type        = string
 }
 
-variable "project_id" {
-  description = "The GCP Project ID where resources will be deployed."
+variable "cloudedge_github_repository" {
+  description = "The GitHub repository name for the Cloud Edge project excluding owner name"
   type        = string
 }
 
@@ -44,17 +39,59 @@ variable "resource_tags" {
   }
 }
 
+variable "cloudedge_project_id" {
+  description = "The GCP Project ID where resources will be deployed."
+  type        = string
+}
+
+variable "enable_logging" {
+  description = "If true, enables logging for all resources that support it."
+  type        = bool
+  default     = true
+}
+
+variable "billing_account_name" {
+  description = "The GCP Billing Account Name to associate with the project."
+  type        = string
+}
+
+############################################
+# Cloudflare and DNS Integration Variables #
+############################################
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS edit permissions"
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudflare_origin_ca_key" {
+  description = "Cloudflare Origin CA Key for creating origin certificates. Optional - only needed when enable_cloudflare_proxy is true."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare zone ID for vibetics.com domain"
+  type        = string
+}
+
+variable "enable_cloudflare_proxy" {
+  description = "If true, Cloudflare proxy will be enabled (orange cloud) for DNS records, providing Cloudflare WAF, DDoS protection, and SSL. If false, DNS resolves directly to GCP load balancer."
+  type        = bool
+  default     = true
+}
+
 variable "root_domain" {
   description = "The root domain name"
   type        = string
-  default     = "vibetics.com"
+  default     = ""
 }
 
-variable "demo_web_app_subdomain_name" {
-  description = "The subdomain name for the application"
-  type        = string
-  default     = "demo-web-app"
-}
+####################################
+# Network Access Control Variables #
+####################################
 
 variable "allowed_https_source_ranges" {
   description = <<-EOT
@@ -71,6 +108,24 @@ variable "allowed_https_source_ranges" {
   EOT
   type        = list(string)
   default     = ["0.0.0.0/0"]
+}
+
+variable "ingress_vpc_cidr_range" {
+  description = "The CIDR range of the ingress VPC network."
+  type        = string
+  default     = "10.0.1.0/24"
+}
+
+variable "proxy_only_subnet_cidr_range" {
+  description = "The CIDR range for the proxy-only subnet required by Regional External ALB."
+  type        = string
+  default     = "10.0.98.0/24"
+}
+
+variable "enable_waf" {
+  description = "If true, GCP Cloud Armor WAF policies will be created and attached to backend services. If false, relies on Cloudflare WAF for protection."
+  type        = bool
+  default     = false
 }
 
 variable "url_map_host_rules" {
@@ -94,74 +149,41 @@ variable "url_map_path_matchers" {
   default = {}
 }
 
-# Cloudflare DNS Integration Variables
-variable "cloudflare_api_token" {
-  description = "Cloudflare API token with DNS edit permissions"
-  type        = string
-  sensitive   = true
+variable "enable_psc" {
+  description = "If true, enables the creation of Private Service Connect (PSC) resources by default. Set to false to disable PSC provisioning."
+  type        = bool
+  default     = false
 }
 
-variable "cloudflare_origin_ca_key" {
-  description = "Cloudflare Origin CA Key for creating origin certificates. Optional - only needed when enable_cloudflare_proxy is true."
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
-variable "cloudflare_zone_id" {
-  description = "Cloudflare zone ID for vibetics.com domain"
-  type        = string
-}
-
-variable "ingress_vpc_cidr_range" {
-  description = "The CIDR range of the ingress VPC network."
-  type        = string
-  default     = "10.0.1.0/24"
-}
+##########################
+# Demo Web App Variables #
+##########################
 
 variable "enable_demo_web_app" {
   description = "If set to true, demo-web-app docker will be deployed in Cloud Run"
   type        = bool
 }
 
-variable "proxy_only_subnet_cidr_range" {
-  description = "The CIDR range for the proxy-only subnet required by Regional External ALB."
+variable "demo_web_app_project_id" {
+  description = "The GCP Project ID where the demo web app Cloud Run service will be deployed. If empty, defaults to the core project_id."
   type        = string
-  default     = "10.0.98.0/24"
+  default     = ""
 }
 
-variable "enable_self_signed_cert" {
-  description = "If true, a self-signed TLS certificate will be created instead of using ACME."
+variable "demo_web_app_service_name" {
+  description = "The name of the Cloud Run service for the demo web app."
+  type        = string
+  default     = "demo-web-app"
+}
+
+variable "demo_web_app_subdomain_name" {
+  description = "The subdomain name for the application"
+  type        = string
+  default     = "demo-web-app"
+}
+
+variable "enable_demo_web_app_psc_neg" {
+  description = "If true, creates a Private Service Connect Network Endpoint Group (PSC NEG) for the demo web app Cloud Run service."
   type        = bool
   default     = false
-}
-
-variable "enable_waf" {
-  description = "If true, GCP Cloud Armor WAF policies will be created and attached to backend services. If false, relies on Cloudflare WAF for protection."
-  type        = bool
-  default     = false
-}
-
-variable "enable_cloudflare_proxy" {
-  description = "If true, Cloudflare proxy will be enabled (orange cloud) for DNS records, providing Cloudflare WAF, DDoS protection, and SSL. If false, DNS resolves directly to GCP load balancer."
-  type        = bool
-  default     = true
-}
-
-variable "enable_psc" {
-  description = "If true, enables the creation of Private Service Connect (PSC) resources by default. Set to false to disable PSC provisioning."
-  type        = bool
-  default     = true
-}
-
-variable "enable_shared_vpc" {
-  description = "If true, deploys the ingress VPC as a Shared VPC host project. Set to false to create a standalone VPC."
-  type        = bool
-  default     = false
-}
-
-variable "enable_internal_alb" {
-  description = "If true, enables the creation of an Internal Application Load Balancer for the demo web app."
-  type        = bool
-  default     = true
 }
