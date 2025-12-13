@@ -1,22 +1,36 @@
 package gcp
 
 import (
+	"os"
 	"testing"
 
 	"github.com/gruntwork-io/terratest/modules/gcp"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTracing(t *testing.T) {
 	t.Parallel()
 
 	projectID := gcp.GetGoogleProjectIDFromEnvVar(t)
+	region := "us-central1"
+
+	// Require necessary environment variables
+	require.NotEmpty(t, os.Getenv("CLOUDFLARE_API_TOKEN"), "CLOUDFLARE_API_TOKEN must be set")
+	require.NotEmpty(t, os.Getenv("CLOUDFLARE_ZONE_ID"), "CLOUDFLARE_ZONE_ID must be set")
+
 	terraformOptions := &terraform.Options{
-		TerraformDir: "../../../",
+		TerraformDir: "../../../deploy/opentofu/gcp/core",
 		Vars: map[string]interface{}{
-			"project_id": projectID,
-			"region":     "us-central1",
+			"project_suffix":              "nonprod",
+			"cloudedge_github_repository": "vibetics-cloudedge",
+			"cloudedge_project_id":        projectID,
+			"region":                      region,
+			"enable_demo_web_app":         false,
+			"cloudflare_api_token":        os.Getenv("CLOUDFLARE_API_TOKEN"),
+			"cloudflare_zone_id":          os.Getenv("CLOUDFLARE_ZONE_ID"),
+			"billing_account_name":        "Test Billing Account",
 		},
 	}
 
@@ -27,6 +41,7 @@ func TestTracing(t *testing.T) {
 	// This is a placeholder for a test that would verify tracing is active.
 	// In a real-world scenario, you would need to generate traffic to the load balancer
 	// and then query the Cloud Trace API to ensure that traces are being generated.
-	// For this example, we will just assert that the apply ran without error.
-	assert.True(t, true, "Tracing test should pass")
+	// For this example, we will just assert that the infrastructure deployed successfully.
+	assert.True(t, true, "Tracing test should pass - infrastructure deployed successfully")
+	t.Log("✓ Infrastructure deployed successfully (tracing would be verified with actual traffic)")
 }

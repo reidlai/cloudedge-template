@@ -1,40 +1,46 @@
 threagile_version: 1.0.0
 
 # ============================================================================
-# Vibetics Cloud Edge - GCP Infrastructure Threat Model
+# Cloud Edge Template - GCP Infrastructure Threat Model
 # ============================================================================
 # Compliance Frameworks: OWASP Top 10, CIS Benchmarks, NIST 800-53, SOC 2
 # Last Updated: 2025-10-18
 # ============================================================================
 
-title: Vibetics Cloud Edge Infrastructure
+title: Cloud Edge Template - GCP Infrastructure
 
 date: 2025-10-18
 
 author:
-  name: DevSecOps Team
-  homepage: github.com/your-org/vibetics-cloudedge
+  name: Reid Lai
+  homepage: github.com/reudkau/cloudedge-template
 
 management_summary_comment: >
-  This threat model covers the GCP cloud infrastructure including WAF, load balancing,
-  VPC networking, and serverless compute. All findings are mapped to compliance frameworks
-  (OWASP Top 10, CIS, NIST 800-53, SOC 2) for regulatory alignment.
+  This threat model covers the GCP cloud infrastructure including optional WAF (Cloudflare or Cloud Armor),
+  regional load balancing, ingress VPC, optional Private Service Connect (PSC), and serverless compute.
+  All findings are mapped to compliance frameworks (OWASP Top 10, CIS, NIST 800-53, SOC 2) for regulatory alignment.
 
 business_criticality: important # values: archive, operational, important, critical, mission-critical
 
 business_overview:
   description: >
-    Multi-region cloud infrastructure providing secure API endpoints with edge security.
-    Key capabilities include DDoS protection (Cloud Armor), TLS encryption, VPC network isolation,
-    and serverless compute (Cloud Run). Designed for high availability and security-first architecture.
+    Regional cloud infrastructure providing secure API endpoints with flexible edge security.
+    Key capabilities include optional DDoS protection (Cloudflare or Cloud Armor), TLS encryption,
+    ingress VPC network isolation, optional Private Service Connect (PSC) for cross-project connectivity,
+    and serverless compute (Cloud Run). Designed for cost optimization, security-first architecture,
+    and flexible deployment patterns (PSC with Internal ALB or direct backend service).
 
 technical_overview:
   description: >
-    OpenTofu-managed GCP infrastructure with defense-in-depth security:
-    - **Edge Layer**: Global HTTPS Load Balancer + Cloud Armor WAF (OWASP Top 10 protection)
-    - **Network Layer**: Segregated ingress/egress VPCs with firewall rules (CIS Benchmark compliant)
-    - **Compute Layer**: Cloud Run serverless containers (internal-only ingress, IAM authentication)
-    - **Encryption**: TLS 1.3 in transit, Google-managed encryption at rest (NIST 800-53 SC-8, SC-13, SC-28)
+    OpenTofu-managed GCP infrastructure with defense-in-depth security and flexible deployment patterns:
+    - **Edge Layer**: Optional Cloudflare WAF (free) or GCP Cloud Armor WAF (paid) for OWASP Top 10 protection
+    - **Load Balancer**: Regional External HTTPS Load Balancer with Cloudflare Origin CA or Google-managed certificates
+    - **Network Layer**: Ingress VPC with configurable firewall rules (Cloudflare IPs or custom ranges)
+    - **Connectivity Layer**: Two patterns available:
+      * Pattern 1 (PSC): Private Service Connect with Internal ALB for maximum isolation
+      * Pattern 2 (Direct): Direct backend service for simplified architecture
+    - **Compute Layer**: Cloud Run serverless containers (INTERNAL_LOAD_BALANCER ingress only)
+    - **Encryption**: TLS 1.2+ in transit, Google-managed encryption at rest (NIST 800-53 SC-8, SC-13, SC-28)
 
 # ============================================================================
 # Compliance & Security Requirements
@@ -53,13 +59,17 @@ questions:
     Compliance: NIST 800-53 IA-5 | SOC 2 CC6.1
 
   How is network traffic segmented?: >
-    Segregated ingress VPC (public-facing) and egress VPC (outbound traffic).
-    VPC peering with firewall rules restricting inter-VPC communication.
+    Ingress VPC for public-facing traffic with configurable firewall rules.
+    Optional Private Service Connect (PSC) provides complete VPC isolation for cross-project connectivity.
+    When PSC is enabled, traffic flows through PSC Service Attachment to separate Web VPC.
+    Firewall rules restrict ingress to Cloudflare IPs (when proxy enabled) or custom source ranges.
     Compliance: NIST 800-53 SC-7, AC-4 | CIS GCP Foundation 3.x
 
   How are DDoS attacks mitigated?: >
-    Cloud Armor WAF with rate limiting and adaptive protection.
-    Global load balancer distributes traffic across regions.
+    Flexible WAF options: Cloudflare WAF (free, when enable_cloudflare_proxy=true) or
+    GCP Cloud Armor WAF (paid, when enable_waf=true) with rate limiting and adaptive protection.
+    Regional external load balancer with SSL termination.
+    Ingress VPC firewall restricts traffic to approved sources (Cloudflare IPs or custom ranges).
     Compliance: NIST 800-53 SC-5 | OWASP Top 10 A09:2021 (Security Misconfiguration)
 
   Why is Cloud Run accessible via Load Balancer without API Gateway?: >
@@ -95,22 +105,27 @@ questions:
 abuse_cases:
   DDoS Attack on Load Balancer: >
     As an attacker, I want to overwhelm the load balancer with traffic to cause service denial.
-    **Mitigation**: Cloud Armor rate limiting (1000 req/min per IP), adaptive protection enabled.
+    **Mitigation**: Cloudflare DDoS protection (when enable_cloudflare_proxy=true) or Cloud Armor
+    rate limiting and adaptive protection (when enable_waf=true). Ingress VPC firewall restricts
+    traffic to approved sources.
     **Compliance**: NIST 800-53 SC-5, OWASP A09:2021
 
   SQL Injection via API Endpoints: >
     As an attacker, I want to inject malicious SQL through API parameters to access/modify database.
-    **Mitigation**: Cloud Armor OWASP ModSecurity Core Rule Set, input validation in application.
+    **Mitigation**: WAF protection (Cloudflare OWASP rules or Cloud Armor ModSecurity Core Rule Set),
+    input validation in application layer.
     **Compliance**: OWASP A03:2021 (Injection), NIST 800-53 SI-10
 
   Cross-Site Scripting (XSS): >
     As an attacker, I want to inject scripts into API responses to hijack user sessions.
-    **Mitigation**: WAF XSS protection rules, Content-Security-Policy headers, output encoding.
+    **Mitigation**: WAF XSS protection rules (Cloudflare or Cloud Armor), Content-Security-Policy headers,
+    output encoding in application layer.
     **Compliance**: OWASP A03:2021 (Injection), CWE-79
 
   Man-in-the-Middle (MITM) Attack: >
     As an attacker, I want to intercept unencrypted traffic between client and server.
-    **Mitigation**: Enforce TLS 1.3, HSTS headers, certificate pinning for mobile apps.
+    **Mitigation**: Enforce TLS 1.2+, Cloudflare Origin CA certificates (15-year, RSA 2048) or
+    Google-managed certificates, HSTS headers, certificate pinning for mobile apps.
     **Compliance**: OWASP A02:2021 (Cryptographic Failures), NIST 800-53 SC-8, SC-13
 
   Container Escape from Cloud Run: >
@@ -118,9 +133,10 @@ abuse_cases:
     **Mitigation**: gVisor sandboxing (default in Cloud Run), least-privilege service accounts, no privileged containers.
     **Compliance**: NIST 800-53 SC-39, CIS Docker Benchmark 5.1
 
-  Data Exfiltration via Egress VPC: >
-    As an attacker, I want to exfiltrate data through unauthorized outbound connections.
-    **Mitigation**: Egress VPC firewall rules (whitelist-only), VPC Flow Logs enabled, Cloud NAT monitoring.
+  Data Exfiltration via Unauthorized Outbound Connections: >
+    As an attacker, I want to exfiltrate data through unauthorized outbound connections from Cloud Run.
+    **Mitigation**: Cloud Run default egress restrictions, optional VPC connector for controlled egress,
+    VPC Flow Logs enabled (when VPC connector used), monitoring of Cloud Run outbound connections.
     **Compliance**: NIST 800-53 AC-4, SC-7 | SOC 2 CC6.6
 
   Secrets Exposure in Code/Logs: >
@@ -136,18 +152,19 @@ abuse_cases:
 security_requirements:
   OWASP Top 10 2021 Coverage: >
     A01 Broken Access Control - IAM policies with least privilege, Cloud Run ingress restrictions.
-    A02 Cryptographic Failures - TLS 1.3 enforced, Google-managed encryption at rest.
-    A03 Injection - WAF OWASP ModSecurity rules, input validation.
+    A02 Cryptographic Failures - TLS 1.2+ enforced, Google-managed encryption at rest.
+    A03 Injection - WAF OWASP rules (Cloudflare or Cloud Armor ModSecurity), input validation.
     A04 Insecure Design - Threat modeling (this document), security architecture reviews.
     A05 Security Misconfiguration - IaC security scans (Checkov), pre-commit hooks.
     A06 Vulnerable Components - SCA tools (pip-audit, govulncheck, Dependabot).
     A07 Authentication Failures - IAM + MFA, Workload Identity, no long-lived keys.
     A08 Software/Data Integrity - Signed container images, SLSA provenance, immutable infrastructure.
     A09 Logging Failures - Cloud Logging enabled, audit logs retained 90+ days.
-    A10 SSRF - Egress VPC firewall rules, metadata server access restrictions.
+    A10 SSRF - Cloud Run default egress restrictions, optional VPC connector for controlled egress.
 
   CIS GCP Foundations Benchmark: >
-    3.x Networking - VPC Flow Logs enabled, Cloud NAT for egress, no default VPC usage.
+    3.x Networking - VPC Flow Logs enabled (when VPC connector used), no default VPC usage,
+    private Google access enabled on subnets.
     4.x Virtual Machines - N/A (serverless Cloud Run only).
     5.x Storage - Encryption at rest (Google-managed), no public buckets.
     6.x Cloud SQL - N/A (no managed databases in scope).
@@ -172,6 +189,7 @@ tags_available:
   - load-balancer
   - waf
   - cloud-armor
+  - cloudflare
   - vpc
   - tls
   - serverless
@@ -187,6 +205,10 @@ tags_available:
   - untrusted
   - internet
   - gvisor
+  - psc
+  - private-service-connect
+  - regional
+  - ingress
 
 # ============================================================================
 # Data Assets
@@ -293,9 +315,9 @@ technical_assets:
     data_assets_stored:
       - api-request-data
     communication_links:
-      client-to-lb:
-        target: global-https-lb
-        description: HTTPS requests from internet to load balancer
+      client-to-cloudflare:
+        target: cloudflare-proxy
+        description: HTTPS requests from internet to Cloudflare (when enable_cloudflare_proxy=true)
         protocol: https
         authentication: none # Public API (authentication happens at application layer)
         authorization: none
@@ -310,9 +332,79 @@ technical_assets:
         diagram_tweak_weight: 1
         diagram_tweak_constraint: false
 
-  Global HTTPS Load Balancer:
-    id: global-https-lb
-    description: GCP Global HTTPS Load Balancer with SSL termination and multi-region distribution
+      client-to-lb:
+        target: regional-https-lb
+        description: HTTPS requests from internet directly to load balancer (when enable_cloudflare_proxy=false)
+        protocol: https
+        authentication: none # Public API (authentication happens at application layer)
+        authorization: none
+        vpn: false
+        ip_filtered: false
+        readonly: false
+        usage: business
+        data_assets_sent:
+          - api-request-data
+        data_assets_received:
+          - api-request-data
+        diagram_tweak_weight: 1
+        diagram_tweak_constraint: false
+
+  Cloudflare Proxy:
+    id: cloudflare-proxy
+    description: Cloudflare Global Network (optional, when enable_cloudflare_proxy=true) - provides free WAF, DDoS protection, and SSL/TLS termination
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: true
+    justification_out_of_scope: >
+      Cloudflare is a third-party managed service outside our direct control.
+      We trust Cloudflare's security posture and use it as our edge security layer.
+    size: service
+    technology: waf
+    tags:
+      - cloudflare
+      - edge
+      - public-facing
+      - waf
+      - security
+    internet: true
+    machine: virtual
+    encryption: data-with-symmetric-shared-key # TLS termination
+    owner: Cloudflare
+    confidentiality: internal
+    integrity: critical
+    availability: critical
+    justification_cia_rating: >
+      Cloudflare proxy is critical when enabled, providing free WAF and DDoS protection.
+      **Compliance**: OWASP Top 10 A03, A09 | NIST 800-53 SC-5, SC-8
+    multi_tenant: true # Cloudflare is multi-tenant
+    redundant: true # Global anycast network
+    custom_developed_parts: false
+    data_assets_processed:
+      - api-request-data
+    data_assets_stored:
+      - service-logs
+    communication_links:
+      cloudflare-to-lb:
+        target: regional-https-lb
+        description: Traffic from Cloudflare to GCP Regional Load Balancer with Origin CA certificate
+        protocol: https
+        authentication: certificates # Cloudflare Origin CA certificate
+        authorization: none
+        tags:
+          - cloudflare
+        vpn: false
+        ip_filtered: true # Firewall restricts to Cloudflare IPs
+        readonly: false
+        usage: business
+        data_assets_sent:
+          - api-request-data
+        data_assets_received:
+          - api-request-data
+
+  Regional HTTPS Load Balancer:
+    id: regional-https-lb
+    description: GCP Regional External HTTPS Load Balancer with SSL termination (Cloudflare Origin CA or Google-managed certificates)
     type: process
     usage: business
     used_as_client_by_human: false
@@ -325,6 +417,7 @@ technical_assets:
       - edge
       - public-facing
       - tls
+      - regional
     internet: true
     machine: virtual
     encryption: data-with-symmetric-shared-key # TLS termination at LB
@@ -333,15 +426,15 @@ technical_assets:
     integrity: critical
     availability: critical
     justification_cia_rating: >
-      Load balancer is critical infrastructure component providing Layer 7 security.
+      Regional load balancer is critical infrastructure component providing Layer 7 routing and TLS termination.
       **Compliance**: NIST 800-53 SC-8 (TLS encryption), CIS GCP 3.9
       **XXE Protection**: Load balancer is protocol-agnostic (HTTP/HTTPS only). XXE risks
       are mitigated at the application layer. APIs are JSON-only, no XML parsing enabled.
       If XML is required, applications must implement secure XML parsers with entity expansion disabled.
       **Access Control**: Cloud Run ingress restricted to INTERNAL_LOAD_BALANCER only,
-      preventing direct internet access. All traffic flows through WAF for inspection.
+      preventing direct internet access. Optional WAF inspection (Cloudflare or Cloud Armor).
     multi_tenant: false
-    redundant: true # Multi-region for DR
+    redundant: true # Regional redundancy
     custom_developed_parts: false # Managed GCP service
     data_assets_processed:
       - api-request-data
@@ -353,11 +446,12 @@ technical_assets:
     communication_links:
       lb-to-waf:
         target: cloud-armor-waf
-        description: Traffic inspection by Cloud Armor before routing to backend
+        description: Optional traffic inspection by Cloud Armor (when enable_waf=true)
         protocol: https
         authentication: none # WAF is inline, not authenticated
         authorization: technical-user # WAF policy enforcement
         tags:
+          - optional
         vpn: false
         ip_filtered: false
         readonly: false
@@ -369,7 +463,7 @@ technical_assets:
 
       lb-to-cloud-run:
         target: cloud-run-backend
-        description: Forwarding approved traffic to Cloud Run NEG
+        description: Forwarding traffic to Cloud Run backend service (direct or via PSC)
         protocol: https
         authentication: token # IAM token authentication for Cloud Run
         authorization: technical-user
@@ -386,7 +480,7 @@ technical_assets:
 
   Cloud Armor WAF:
     id: cloud-armor-waf
-    description: GCP Cloud Armor Web Application Firewall with OWASP ModSecurity Core Rule Set
+    description: GCP Cloud Armor Web Application Firewall with OWASP ModSecurity Core Rule Set (optional, when enable_waf=true)
     type: process
     usage: business
     used_as_client_by_human: false
@@ -398,6 +492,7 @@ technical_assets:
       - security
       - waf
       - owasp
+      - optional
     internet: false # Inline with load balancer
     machine: virtual
     encryption: none # Inspects decrypted traffic from LB
@@ -406,7 +501,8 @@ technical_assets:
     integrity: critical
     availability: critical
     justification_cia_rating: >
-      WAF is critical security control protecting against OWASP Top 10.
+      When enabled, WAF is critical security control protecting against OWASP Top 10.
+      Optional based on security requirements and budget (Cloudflare WAF is free alternative).
       **Compliance**: OWASP Top 10 A03, A05, A09 | NIST 800-53 SI-3, SI-4
     multi_tenant: false
     redundant: true
@@ -418,7 +514,7 @@ technical_assets:
 
   Cloud Run Backend:
     id: cloud-run-backend
-    description: Cloud Run serverless containers running the API service (demo-api)
+    description: Cloud Run serverless containers running the API service (demo-web-app). Connected via direct backend service or PSC.
     type: process
     usage: business
     used_as_client_by_human: false
@@ -441,7 +537,10 @@ technical_assets:
       Backend service is core application logic with defense-in-depth security.
       **Compliance**: NIST 800-53 AC-3, SC-39 (container isolation) | CIS Docker Benchmark
       **Network Isolation**: INTERNAL_LOAD_BALANCER ingress prevents direct internet access.
-      No public Cloud Run URLs exposed. All traffic routed through Load Balancer + WAF.
+      No public Cloud Run URLs exposed. All traffic routed through Load Balancer + optional WAF.
+      **Connectivity Options**: Two patterns supported:
+        - Pattern 1 (PSC): Private Service Connect with Internal ALB for maximum VPC isolation
+        - Pattern 2 (Direct): Direct backend service to serverless NEG for simplified architecture
       **Application Security**: Demo uses allUsers IAM for infrastructure testing only.
       Production apps MUST implement authentication (OAuth 2.0, JWT, API keys, or Cloud Endpoints/Apigee).
       **Container Security**: gVisor sandboxing enabled, no privileged containers, least-privilege service accounts.
@@ -462,31 +561,35 @@ technical_assets:
 
 trust_boundaries:
 
-  Internet to GCP Edge:
-    id: internet-to-gcp
-    description: Public internet to GCP Global Load Balancer (untrusted → trusted)
+  Internet to Edge:
+    id: internet-to-edge
+    description: Public internet to Cloudflare or GCP Load Balancer (untrusted → edge security)
     type: network-cloud-provider
     tags:
       - internet
       - untrusted
+      - edge
     technical_assets_inside:
-      - global-https-lb
+      - cloudflare-proxy
+      - regional-https-lb
       - cloud-armor-waf
     technical_assets_outside:
       - external-clients
 
-  GCP Internal Network:
-    id: gcp-internal
-    description: GCP internal network boundary (load balancer → VPC → Cloud Run)
+  Edge to GCP Internal:
+    id: edge-to-gcp-internal
+    description: Edge security layer to GCP internal network (load balancer → Cloud Run)
     type: network-cloud-provider
     tags:
       - gcp
       - internal
+      - ingress
     technical_assets_inside:
       - cloud-run-backend
     technical_assets_outside:
-      - global-https-lb
+      - regional-https-lb
       - cloud-armor-waf
+      - cloudflare-proxy
 
 # ============================================================================
 # Shared Runtimes
@@ -504,14 +607,25 @@ shared_runtimes:
     technical_assets_running:
       - cloud-run-backend
 
-  GCP Global Load Balancing:
+  GCP Regional Load Balancing:
     id: gcp-load-balancing
-    description: GCP Global HTTPS Load Balancing service
+    description: GCP Regional External HTTPS Load Balancing service
     tags:
       - gcp
       - edge
+      - regional
     technical_assets_running:
-      - global-https-lb
+      - regional-https-lb
+
+  Cloudflare Global Network:
+    id: cloudflare-network
+    description: Cloudflare Global Anycast Network (optional, multi-tenant CDN and WAF)
+    tags:
+      - cloudflare
+      - edge
+      - waf
+    technical_assets_running:
+      - cloudflare-proxy
 
 # ============================================================================
 # Individual Risk Categories (Custom Risks Beyond Built-in Threagile Rules)
@@ -527,16 +641,16 @@ individual_risk_categories: {}
 
 risk_tracking:
 
-  unguarded-access-from-internet@cloud-run-backend@global-https-lb@global-https-lb>lb-to-cloud-run:
+  unguarded-access-from-internet@cloud-run-backend@regional-https-lb@regional-https-lb>lb-to-cloud-run:
     status: false-positive
     justification: >
-      This is FALSE POSITIVE. This infrastructure provides edge networking (Load Balancer + WAF),
+      This is FALSE POSITIVE. This infrastructure provides edge networking (Load Balancer + optional WAF),
       not application-layer API Gateway. Application teams deploy their own API Gateways
       (Cloud Endpoints, Apigee, Kong, or custom auth middleware) INSIDE Cloud Run containers.
 
       Defense-in-Depth Layers:
-      1. Infrastructure Layer (THIS PROJECT): Global HTTPS LB + Cloud Armor WAF provides
-         Layer 7 DDoS protection, TLS 1.3 termination, OWASP Top 10 filtering, geo-blocking
+      1. Infrastructure Layer (THIS PROJECT): Regional HTTPS LB + optional WAF (Cloudflare or Cloud Armor)
+         provides Layer 7 DDoS protection, TLS 1.2+ termination, OWASP Top 10 filtering
       2. Application Layer (APP TEAMS): API Gateway inside Cloud Run handles authentication
          (OAuth 2.0, JWT, API keys), rate limiting, request validation, schema enforcement
 
@@ -553,14 +667,14 @@ risk_tracking:
     date: 2025-10-18
     checked_by: DevSecOps Team
 
-  xml-external-entity@global-https-lb:
+  xml-external-entity@regional-https-lb:
     status: false-positive
     justification: >
       This is FALSE POSITIVE. APIs are JSON-only by default. XML processing is NOT enabled
       in the demo backend or standard API deployments.
 
       Why This Risk Does Not Apply:
-      - Global HTTPS Load Balancer is protocol-agnostic (HTTP/HTTPS) and does NOT perform XML parsing
+      - Regional HTTPS Load Balancer is protocol-agnostic (HTTP/HTTPS) and does NOT perform XML parsing
       - Load balancer passes requests to backend applications without content inspection
       - XXE attacks require XML parsing at the application layer
       - All current and planned APIs use JSON (Content-Type: application/json)
@@ -571,7 +685,7 @@ risk_tracking:
       - Disable XML external entity processing (libxml2: LIBXML_NOENT flag off)
       - Use secure XML parsers with entity expansion limits
       - Validate Content-Type headers and reject unexpected XML
-      - Apply Cloud Armor WAF rules to detect malicious XML patterns
+      - Apply WAF rules (Cloudflare or Cloud Armor) to detect malicious XML patterns
       - Perform dedicated threat modeling for XML-specific attack vectors
 
       Current risk: NOT APPLICABLE (no XML processing at any layer).
