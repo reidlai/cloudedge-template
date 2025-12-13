@@ -1,12 +1,14 @@
 package gcp
 
 import (
+	"os"
 	"testing"
 
 	"github.com/gruntwork-io/terratest/modules/gcp"
 	"github.com/gruntwork-io/terratest/modules/shell"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCISCompliance(t *testing.T) {
@@ -14,18 +16,23 @@ func TestCISCompliance(t *testing.T) {
 
 	projectID := gcp.GetGoogleProjectIDFromEnvVar(t)
 	region := "northamerica-northeast2"
-	environment := "test-cis"
+	projectSuffix := "nonprod"
+
+	// Require necessary environment variables
+	require.NotEmpty(t, os.Getenv("CLOUDFLARE_API_TOKEN"), "CLOUDFLARE_API_TOKEN must be set")
+	require.NotEmpty(t, os.Getenv("CLOUDFLARE_ZONE_ID"), "CLOUDFLARE_ZONE_ID must be set")
 
 	terraformOptions := &terraform.Options{
-		TerraformDir: "../../../",
+		TerraformDir: "../../../deploy/opentofu/gcp/core",
 		Vars: map[string]interface{}{
-			"project_id":              projectID,
-			"region":                  region,
-			"environment":             environment,
-			"enable_ingress_vpc":      true,
-			"enable_egress_vpc":       true,
-			"enable_firewall":         true,
-			"enable_self_signed_cert": true,
+			"project_suffix":              projectSuffix,
+			"cloudedge_github_repository": "vibetics-cloudedge",
+			"cloudedge_project_id":        projectID,
+			"region":                      region,
+			"enable_demo_web_app":         false,
+			"cloudflare_api_token":        os.Getenv("CLOUDFLARE_API_TOKEN"),
+			"cloudflare_zone_id":          os.Getenv("CLOUDFLARE_ZONE_ID"),
+			"billing_account_name":        "Test Billing Account",
 		},
 	}
 
@@ -44,7 +51,7 @@ func TestCISCompliance(t *testing.T) {
 		Command: "gcloud",
 		Args: []string{
 			"compute", "networks", "subnets", "describe",
-			environment + "-ingress-subnet",
+			"ingress-subnet",
 			"--project=" + projectID,
 			"--region=" + region,
 			"--format=value(privateIpGoogleAccess)",
@@ -52,20 +59,6 @@ func TestCISCompliance(t *testing.T) {
 	}
 	ingressPGA := shell.RunCommandAndGetOutput(t, ingressSubnetCmd)
 	assert.Contains(t, ingressPGA, "True", "CIS 3.9: Private Google Access must be enabled on ingress subnet")
-
-	// Get egress VPC subnet details
-	egressSubnetCmd := shell.Command{
-		Command: "gcloud",
-		Args: []string{
-			"compute", "networks", "subnets", "describe",
-			environment + "-egress-subnet",
-			"--project=" + projectID,
-			"--region=" + region,
-			"--format=value(privateIpGoogleAccess)",
-		},
-	}
-	egressPGA := shell.RunCommandAndGetOutput(t, egressSubnetCmd)
-	assert.Contains(t, egressPGA, "True", "CIS 3.9: Private Google Access must be enabled on egress subnet")
 
 	t.Log("✓ CIS 3.9 compliance verified: Private Google Access enabled")
 
@@ -78,7 +71,7 @@ func TestCISCompliance(t *testing.T) {
 		Args: []string{
 			"compute", "firewall-rules", "list",
 			"--project=" + projectID,
-			"--filter=network:" + environment + "-ingress-vpc AND allowed.ports:22",
+			"--filter=network:ingress-vpc AND allowed.ports:22",
 			"--format=json",
 		},
 	}
@@ -96,7 +89,7 @@ func TestCISCompliance(t *testing.T) {
 		Args: []string{
 			"compute", "firewall-rules", "list",
 			"--project=" + projectID,
-			"--filter=network:" + environment + "-ingress-vpc AND allowed.ports:3389",
+			"--filter=network:ingress-vpc AND allowed.ports:3389",
 			"--format=json",
 		},
 	}

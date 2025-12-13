@@ -20,6 +20,24 @@ This tier validates the behavior of the fully deployed infrastructure. It is dri
 - **Specifications**: Human-readable Gherkin scenarios are defined in `.feature` files within the `features/` directory.
 - **Implementation**: The Go test files in `tests/integration/` and `tests/contract/` implement the steps defined in the Gherkin scenarios.
 
+### BDD Feature Files
+
+The following BDD scenarios are defined in the `features/` directory:
+
+| Feature File | Description | Tags |
+|--------------|-------------|------|
+| `features/core_infrastructure.feature` | Core ingress infrastructure (VPC, Load Balancer, WAF, Firewall, DNS) | @smoke, @integration, @contract, @security |
+| `features/demo_web_app.feature` | Demo application deployment (Cloud Run, Internal ALB, PSC, VPC) | @smoke, @integration, @contract, @security |
+| `features/project_singleton.feature` | Project-level resources (APIs, billing, logging, SSL certificates) | @smoke, @integration, @contract |
+| `features/connectivity_patterns.feature` | PSC and direct connectivity patterns | @integration |
+| `features/directory_migration.feature` | Directory structure migration validation | @integration |
+
+**Tag Meanings**:
+- `@smoke`: Critical path tests that run after every deployment (nonprod and prod)
+- `@integration`: Full integration tests against live infrastructure (nonprod only)
+- `@contract`: Infrastructure-as-Code contract tests (validate Terraform/OpenTofu configuration)
+- `@security`: Security-focused tests (firewall rules, ingress policies, WAF validation)
+
 **How to Run All Integration Tests:**
 This command deploys the infrastructure, runs all integration tests against it, and then tears it down.
 

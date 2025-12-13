@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	gcptest "github.com/gruntwork-io/terratest/modules/gcp"
@@ -12,24 +13,16 @@ import (
 )
 
 // TestFirewallSourceRestriction validates that ingress VPC firewall rules
-// restrict HTTPS traffic to Google Cloud Load Balancer IP ranges only (FR-009).
+// restrict HTTPS traffic appropriately based on configuration.
 //
-// This test addresses CRITICAL finding C1 from /speckit.analyze:
-// "No test validates that ingress firewall restricts source IPs to load balancer ranges only"
+// When enable_cloudflare_proxy=true: Restricts to Cloudflare IP ranges
+// When enable_cloudflare_proxy=false: Restricts to configured allowed_https_source_ranges
 //
 // Acceptance Criteria:
 // - Firewall rule for HTTPS (port 443) exists on ingress VPC
-// - Source ranges are restricted to Google Cloud Load Balancer IPs:
-//   - 35.191.0.0/16 (health checks and proxy IPs)
-//   - 130.211.0.0/22 (legacy health checks)
-//
-// - Source ranges do NOT include 0.0.0.0/0 (unrestricted internet access)
-//
-// Test Scenario:
-// Given a deployed baseline infrastructure
-// When I inspect the ingress VPC firewall rules
-// Then the HTTPS rule should restrict source ranges to GCP Load Balancer IPs
-// And the rule should NOT allow traffic from 0.0.0.0/0
+// - Source ranges are either Cloudflare IPs or configured allowed ranges
+// - Firewall rule direction is INGRESS
+// - Firewall is applied to ingress VPC
 func TestFirewallSourceRestriction(t *testing.T) {
 	t.Parallel()
 
@@ -38,24 +31,26 @@ func TestFirewallSourceRestriction(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	// Define expected Google Cloud Load Balancer IP ranges
-	expectedSourceRanges := []string{
-		"35.191.0.0/16",  // GCP Load Balancer health check and proxy IPs
-		"130.211.0.0/22", // GCP legacy health check IPs
-	}
-
-	// Setup Terraform options
 	projectID := getProjectID(t)
+	region := "northamerica-northeast2"
+	projectSuffix := "nonprod"
+
+	// Require necessary environment variables
+	require.NotEmpty(t, os.Getenv("CLOUDFLARE_API_TOKEN"), "CLOUDFLARE_API_TOKEN must be set")
+	require.NotEmpty(t, os.Getenv("CLOUDFLARE_ZONE_ID"), "CLOUDFLARE_ZONE_ID must be set")
+
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
-		TerraformDir: "../../../",
+		TerraformDir: "../../../deploy/opentofu/gcp/core",
 		Vars: map[string]interface{}{
-			"project_id":     projectID,
-			"environment":    "nonprod",
-			"cloud_provider": "gcp",
-			"region":         "northamerica-northeast2",
-		},
-		EnvVars: map[string]string{
-			"GOOGLE_PROJECT": projectID,
+			"project_suffix":              projectSuffix,
+			"cloudedge_github_repository": "vibetics-cloudedge",
+			"cloudedge_project_id":        projectID,
+			"region":                      region,
+			"enable_demo_web_app":         false,
+			"enable_cloudflare_proxy":     true, // Test with Cloudflare proxy enabled
+			"cloudflare_api_token":        os.Getenv("CLOUDFLARE_API_TOKEN"),
+			"cloudflare_zone_id":          os.Getenv("CLOUDFLARE_ZONE_ID"),
+			"billing_account_name":        "Test Billing Account",
 		},
 	})
 
@@ -63,10 +58,8 @@ func TestFirewallSourceRestriction(t *testing.T) {
 	defer terraform.Destroy(t, terraformOptions)
 	terraform.InitAndApply(t, terraformOptions)
 
-	// Get the firewall rule name from Terraform outputs
-	// The firewall module should output the rule name
-	firewallRuleName := terraform.Output(t, terraformOptions, "firewall_rule_name")
-	require.NotEmpty(t, firewallRuleName, "Firewall rule name should not be empty")
+	// Expected firewall rule name based on project_suffix
+	firewallRuleName := projectSuffix + "-allow-https"
 
 	// Fetch firewall rule details from GCP using Compute API
 	ctx := context.Background()
@@ -99,9 +92,29 @@ func TestFirewallSourceRestriction(t *testing.T) {
 	// CRITICAL VALIDATION: Check source ranges
 	require.NotEmpty(t, firewallRule.SourceRanges, "Firewall rule should have source ranges defined")
 
-	// Validate source ranges match expected Google Cloud Load Balancer IPs
-	assert.ElementsMatch(t, expectedSourceRanges, firewallRule.SourceRanges,
-		"Firewall source ranges should match Google Cloud Load Balancer IP ranges")
+	// When Cloudflare proxy is enabled, verify Cloudflare IP ranges are used
+	// Cloudflare IP ranges (from core.tf locals)
+	cloudflareIPRanges := []string{
+		"173.245.48.0/20",
+		"103.21.244.0/22",
+		"103.22.200.0/22",
+		"103.31.4.0/22",
+		"141.101.64.0/18",
+		"108.162.192.0/18",
+		"190.93.240.0/20",
+		"188.114.96.0/20",
+		"197.234.240.0/22",
+		"198.41.128.0/17",
+		"162.158.0.0/15",
+		"104.16.0.0/13",
+		"104.24.0.0/14",
+		"172.64.0.0/13",
+		"131.0.72.0/22",
+	}
+
+	// Validate source ranges match Cloudflare IPs
+	assert.ElementsMatch(t, cloudflareIPRanges, firewallRule.SourceRanges,
+		"Firewall source ranges should match Cloudflare IP ranges when enable_cloudflare_proxy=true")
 
 	// CRITICAL SECURITY CHECK: Ensure 0.0.0.0/0 is NOT in source ranges
 	for _, sourceRange := range firewallRule.SourceRanges {
@@ -109,10 +122,8 @@ func TestFirewallSourceRestriction(t *testing.T) {
 			"Firewall rule MUST NOT allow unrestricted internet access (0.0.0.0/0)")
 	}
 
-	// Validate firewall direction is INGRESS (or empty, which defaults to INGRESS)
-	if firewallRule.Direction != "" {
-		assert.Equal(t, "INGRESS", firewallRule.Direction, "Firewall rule should be for ingress traffic")
-	}
+	// Validate firewall direction is INGRESS
+	assert.Equal(t, "INGRESS", firewallRule.Direction, "Firewall rule should be for ingress traffic")
 
 	// Validate firewall is applied to the ingress VPC network
 	assert.Contains(t, firewallRule.Network, "ingress-vpc",
@@ -120,7 +131,7 @@ func TestFirewallSourceRestriction(t *testing.T) {
 
 	t.Logf("✅ Firewall source restriction validation PASSED")
 	t.Logf("   - Rule: %s", firewallRuleName)
-	t.Logf("   - Source Ranges: %v", firewallRule.SourceRanges)
+	t.Logf("   - Source Ranges: Cloudflare IP ranges (%d ranges)", len(firewallRule.SourceRanges))
 	t.Logf("   - Protocol: TCP, Ports: 443 (HTTPS)")
 	t.Logf("   - Direction: %s", firewallRule.Direction)
 	t.Logf("   - Network: %s", firewallRule.Network)

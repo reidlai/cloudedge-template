@@ -9,7 +9,7 @@ Vibetics CloudEdge provides a **modular secure baseline infrastructure** for dep
 **What This Project Provides** (Infrastructure-Only):
 
 - **Flexible Edge Security**: Choose between Cloudflare WAF (free) or GCP Cloud Armor (paid)
-- **Flexible Connectivity**: PSC (isolation), Direct Cloud Run (simplicity), or Shared VPC (enterprise)
+- **Flexible Connectivity**: PSC (maximum isolation) or Direct Cloud Run (simplicity)
 - Regional HTTPS Load Balancer with SSL termination
 - Cloudflare Origin CA certificates or Google-managed certificates
 - Optional Private Service Connect (PSC) for cross-VPC connectivity
@@ -286,7 +286,7 @@ After deployment, manually configure Cloudflare SSL/TLS:
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Variables, feature flags, environment setup |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Prerequisites, IAM setup, deployment guide |
 | [docs/SECURITY.md](docs/SECURITY.md) | Threat modeling, security controls, STRIDE analysis |
-| [docs/TESTING.md](docs/TESTING.md) | Testing strategy, Terratest integration tests |
+| [docs/TESTING.md](docs/TESTING.md) | Testing strategy, BDD/Cucumber scenarios, Terratest integration tests, post-deployment validation |
 | [docs/CI_WORKFLOW.md](docs/CI_WORKFLOW.md) | CI/CD pipeline documentation |
 | [docs/PRE_COMMIT_SETUP.md](docs/PRE_COMMIT_SETUP.md) | Pre-commit hooks setup guide |
 
@@ -386,6 +386,54 @@ poetry run checkov --directory . --framework terraform
 ```
 
 For complete development workflow, see [docs/PRE_COMMIT_SETUP.md](docs/PRE_COMMIT_SETUP.md).
+
+## Testing
+
+This project uses a two-tiered TDD approach:
+
+- **Tier 1**: Unit tests (OpenTofu native `.tftest.hcl` files) - planned for future implementation
+- **Tier 2**: Integration & BDD tests (Terratest + Cucumber) - implemented and running in CI/CD
+
+### BDD/Cucumber Acceptance Tests
+
+BDD scenarios are defined in the `features/` directory using Gherkin syntax with tagged scenarios:
+
+| Feature File | Description | Tags |
+|--------------|-------------|------|
+| `features/core_infrastructure.feature` | Core ingress infrastructure tests | @smoke, @integration, @contract, @security |
+| `features/demo_web_app.feature` | Demo application deployment tests | @smoke, @integration, @contract, @security |
+| `features/project_singleton.feature` | Project-level resource tests | @smoke, @integration, @contract |
+| `features/connectivity_patterns.feature` | PSC and direct connectivity patterns | @integration |
+
+**Test Execution**:
+
+```bash
+# Run all integration tests
+cd tests/integration/gcp
+go test -v -timeout 30m
+
+# Run specific test suite
+go test -v -run TestFullBaseline -timeout 30m
+
+# Run contract tests
+cd tests/contract
+poetry run go test -v -timeout 10m
+```
+
+### Post-Deployment Validation
+
+After deployment to the `nonprod` environment, the CD pipeline automatically runs:
+
+- **Integration tests** against live infrastructure (Terratest + Cucumber scenarios)
+- **Smoke tests** for critical paths (tagged with `@smoke`)
+- **DAST scans** using OWASP ZAP for security validation
+
+After deployment to the `prod` environment:
+
+- **Smoke tests** verify critical functionality
+- **DAST scans** ensure production security posture
+
+See [docs/TESTING.md](docs/TESTING.md) for detailed testing documentation and execution details.
 
 ## Branching Strategy
 

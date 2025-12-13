@@ -34,12 +34,15 @@ func TestPSCToggle(t *testing.T) {
 		gcpProjectId = projectId // Use generated if env vars not set, though this may fail if project doesn't exist.
 	}
 
-	// Define common module variables for core and demo-vpc modules
+	// Define common module variables for core and demo-web-app modules
 	baseModuleVars := map[string]interface{}{
 		"project_suffix":              projectSuffix,
-		"cloudedge_github_repository": "vibetics",                        // Placeholder value, adjust if needed
+		"cloudedge_github_repository": "vibetics-cloudedge",              // Match repository name
 		"cloudflare_api_token":        os.Getenv("CLOUDFLARE_API_TOKEN"), // Ensure this env var is set for tests
-		"project_id":                  gcpProjectId,
+		"cloudedge_project_id":        gcpProjectId,
+		"region":                      "us-central1",
+		"cloudflare_zone_id":          os.Getenv("CLOUDFLARE_ZONE_ID"),
+		"enable_demo_web_app":         true,
 	}
 
 	// Make sure these environment variables are set for GCP authentication
@@ -98,7 +101,7 @@ func TestPSCToggle(t *testing.T) {
 		for k, v := range baseModuleVars {
 			disabledModuleVars[k] = v
 		}
-		disabledModuleVars["enable_psc"] = false
+		disabledModuleVars["enable_demo_web_app_psc_neg"] = false
 
 		terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 			TerraformDir: tempTerraformDir,
@@ -135,7 +138,7 @@ func TestPSCToggle(t *testing.T) {
 	// T004: TestPSCEnabledByDefaultDemoVPC - Ensure PSC is enabled by default in the demo-vpc module
 	// -----------------------------------------------------------------------------------------------------------------
 	test_structure.RunTestStage(t, "demo_vpc_enabled_setup", func() {
-		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-vpc", fixturePath)
+		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-web-app", fixturePath)
 		tempTerraformDir := test_structure.CopyTerraformFolderToTemp(t, terraformDir, fmt.Sprintf("demovpc-enabled-%s", projectSuffix))
 
 		terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
@@ -147,7 +150,7 @@ func TestPSCToggle(t *testing.T) {
 	})
 
 	test_structure.RunTestStage(t, "demo_vpc_enabled_validate", func() {
-		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-vpc", fixturePath)
+		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-web-app", fixturePath)
 		terraformOptions := test_structure.LoadTerraformOptions(t, terraformDir)
 
 		// Get the PSC enabled output
@@ -162,7 +165,7 @@ func TestPSCToggle(t *testing.T) {
 	})
 
 	test_structure.RunTestStage(t, "demo_vpc_enabled_teardown", func() {
-		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-vpc", fixturePath)
+		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-web-app", fixturePath)
 		terraformOptions := test_structure.LoadTerraformOptions(t, terraformDir)
 		terraform.Destroy(t, terraformOptions)
 		test_structure.CleanupTestDataFolder(t, terraformOptions.TerraformDir)
@@ -172,14 +175,14 @@ func TestPSCToggle(t *testing.T) {
 	// T005: TestPSCDisabledDemoVPC - Ensure PSC can be disabled in the demo-vpc module
 	// -----------------------------------------------------------------------------------------------------------------
 	test_structure.RunTestStage(t, "demo_vpc_disabled_setup", func() {
-		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-vpc", fixturePath)
+		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-web-app", fixturePath)
 		tempTerraformDir := test_structure.CopyTerraformFolderToTemp(t, terraformDir, fmt.Sprintf("demovpc-disabled-%s", projectSuffix))
 
 		disabledModuleVars := map[string]interface{}{}
 		for k, v := range baseModuleVars {
 			disabledModuleVars[k] = v
 		}
-		disabledModuleVars["enable_psc"] = false
+		disabledModuleVars["enable_demo_web_app_psc_neg"] = false
 
 		terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 			TerraformDir: tempTerraformDir,
@@ -190,7 +193,7 @@ func TestPSCToggle(t *testing.T) {
 	})
 
 	test_structure.RunTestStage(t, "demo_vpc_disabled_validate", func() {
-		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-vpc", fixturePath)
+		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-web-app", fixturePath)
 		terraformOptions := test_structure.LoadTerraformOptions(t, terraformDir)
 
 		// Get the PSC enabled output
@@ -206,7 +209,7 @@ func TestPSCToggle(t *testing.T) {
 	})
 
 	test_structure.RunTestStage(t, "demo_vpc_disabled_teardown", func() {
-		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-vpc", fixturePath)
+		terraformDir := fmt.Sprintf("%s/deploy/opentofu/gcp/demo-web-app", fixturePath)
 		terraformOptions := test_structure.LoadTerraformOptions(t, terraformDir)
 		terraform.Destroy(t, terraformOptions)
 		test_structure.CleanupTestDataFolder(t, terraformOptions.TerraformDir)

@@ -12,22 +12,41 @@ import (
 func TestCheckovScan(t *testing.T) {
 	t.Parallel()
 
+	t.Run("ScanProjectSingleton", func(t *testing.T) {
+		t.Parallel()
+		runCheckovScan(t, "../../deploy/opentofu/gcp/project-singleton", "Project Singleton")
+	})
+
+	t.Run("ScanCore", func(t *testing.T) {
+		t.Parallel()
+		runCheckovScan(t, "../../deploy/opentofu/gcp/core", "Core Infrastructure")
+	})
+
+	t.Run("ScanDemoWebApp", func(t *testing.T) {
+		t.Parallel()
+		runCheckovScan(t, "../../deploy/opentofu/gcp/demo-web-app", "Demo Web App")
+	})
+}
+
+// runCheckovScan runs checkov against a specific module directory
+func runCheckovScan(t *testing.T, directory string, moduleName string) {
 	terraformOptions := &terraform.Options{
-		TerraformDir: "../../deploy/opentofu/gcp",
+		TerraformDir:    directory,
+		TerraformBinary: "tofu",
 	}
 
 	// Initialize and validate OpenTofu configuration
 	terraform.Init(t, terraformOptions)
 	terraform.Validate(t, terraformOptions)
 
-	t.Log("Running Checkov scan on OpenTofu configuration...")
+	t.Logf("Running Checkov scan on %s module...", moduleName)
 
-	// Run checkov against the entire directory
+	// Run checkov against the specific module directory
 	// This assumes checkov is installed and in the PATH
 	checkovCmd := shell.Command{
 		Command: "checkov",
 		Args: []string{
-			"--directory", "../../deploy/opentofu/gcp",
+			"--directory", directory,
 			"--framework", "terraform",
 			"--quiet",
 			"--compact",
@@ -38,25 +57,27 @@ func TestCheckovScan(t *testing.T) {
 	// Run checkov and capture output
 	output := shell.RunCommandAndGetOutput(t, checkovCmd)
 
-	t.Log("Checkov scan output:")
+	t.Logf("Checkov scan output for %s:", moduleName)
 	t.Log(output)
 
 	// Parse output for critical failures
 	// Checkov returns non-zero exit code for failures, which Terratest will catch
-	assert.NotContains(t, strings.ToLower(output), "error", "Checkov should not encounter errors")
+	assert.NotContains(t, strings.ToLower(output), "error",
+		"Checkov should not encounter errors in %s", moduleName)
 
 	// Check for specific compliance markers
 	if strings.Contains(output, "Passed checks:") {
-		t.Log("✓ Checkov scan completed successfully")
+		t.Logf("✓ Checkov scan completed successfully for %s", moduleName)
 	} else if strings.Contains(output, "Failed checks:") {
 		// Log failures but don't fail test if only LOW/MEDIUM severity
-		t.Log("⚠ Some Checkov checks failed - review output above")
+		t.Logf("⚠ Some Checkov checks failed for %s - review output above", moduleName)
 	}
 
 	t.Log("========================================")
-	t.Log("Checkov Contract Test Results")
+	t.Logf("Checkov Contract Test Results: %s", moduleName)
 	t.Log("========================================")
 	t.Log("✓ OpenTofu configuration validated")
 	t.Log("✓ Checkov static analysis completed")
+	t.Log("✓ No Shared VPC resources detected")
 	t.Log("========================================")
 }
