@@ -1,10 +1,8 @@
 # Cloudedge Template
 
-Cloud-agnostic edge infrastructure managed by OpenTofu, providing secure ingress with optional WAF, load balancing, and Private Service Connect (PSC) connectivity for backend applications.
-
 ## Overview
 
-Vibetics CloudEdge provides a **modular secure baseline infrastructure** for deploying applications behind a unified edge security layer. The current implementation focuses on GCP with planned expansion to AWS and Azure.
+CloudEdge Template provides a **modular secure baseline infrastructure** for deploying applications behind a unified edge security layer. The current implementation focuses on GCP with planned expansion to AWS and Azure.
 
 **What This Project Provides** (Infrastructure-Only):
 
