@@ -1,4 +1,4 @@
-# Vibetics CloudEdge
+# Cloudedge Template
 
 Cloud-agnostic edge infrastructure managed by OpenTofu, providing secure ingress with optional WAF, load balancing, and Private Service Connect (PSC) connectivity for backend applications.
 
