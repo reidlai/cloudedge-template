@@ -445,4 +445,4 @@ All changes flow: `feature-branch` -> `main` -> `nonprod` -> `prod`
 
 ## License
 
-This project is under a proprietary license. See [LICENSE.md](./LICENSE.md) for details.
+This project is licensed under the MIT License. See [LICENSE.md](./LICENSE.md) for details.
